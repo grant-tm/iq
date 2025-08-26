@@ -1,6 +1,6 @@
 #define XTDLIB_IMPLEMENTATION
-#include "xtdlib.h"
+#include "xtdlib/xtdlib.h"
 
-void main (void) {
+int main (void) {
 	return 0;
 }

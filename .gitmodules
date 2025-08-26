@@ -1,0 +1,3 @@
+[submodule "xtdlib"]
+	path = xtdlib
+	url = https://github.com/grant-tm/xtdlib
