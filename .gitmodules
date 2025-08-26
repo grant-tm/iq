@@ -1,3 +1,9 @@
 [submodule "xtdlib"]
 	path = xtdlib
 	url = https://github.com/grant-tm/xtdlib
+[submodule "imgui"]
+	path = imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "Nuklear"]
+	path = Nuklear
+	url = https://github.com/Immediate-Mode-UI/Nuklear.git
