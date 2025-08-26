@@ -8,6 +8,7 @@ i32 main(void) {
     
 	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
 	SDL_Window *window = SDL_CreateWindow("SDL3 OpenGL Test", 960, 540, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+	SDL_SetWindowTitle(window, "IQ");
 	SDL_GLContext glctx = SDL_GL_CreateContext(window);
 
     bool program_running = true;
