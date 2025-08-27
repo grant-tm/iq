@@ -7,3 +7,6 @@
 [submodule "Nuklear"]
 	path = Nuklear
 	url = https://github.com/Immediate-Mode-UI/Nuklear.git
+[submodule "clay"]
+	path = clay
+	url = https://github.com/nicbarker/clay.git
