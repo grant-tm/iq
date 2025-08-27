@@ -8,14 +8,7 @@
 #include "clay.h"
 #include "renderers/SDL3/clay_renderer_SDL3.c"
 
-void clay_error_handler(Clay_ErrorData errorData) {
-    printf("%s", errorData.errorText.chars);
-    //switch(errorData.errorType) {}
-}
-
-const Clay_Color COLOR_LIGHT = (Clay_Color) {224, 215, 210, 255};
-const Clay_Color COLOR_RED = (Clay_Color) {168, 66, 28, 255};
-const Clay_Color COLOR_ORANGE = (Clay_Color) {225, 138, 50, 255};
+#include "layouts.h"
 
 typedef struct MouseState {
 	i32 position_x;
@@ -99,45 +92,11 @@ i32 main(i32 argc, char *argv[]) {
 		while (SDL_PollEvent(&event)) {
         	sdl_event_handler(&application_state, &event);    
         }
-		
-		i32 screen_width, screen_height;
-		SDL_GetWindowSize(application_state.window, &screen_width, &screen_height);
-        Clay_SetLayoutDimensions((Clay_Dimensions) { screen_width, screen_height });
-        Clay_SetPointerState((Clay_Vector2) { 
-				application_state.mouse_state.position_x, 
-				application_state.mouse_state.position_y }, 
-				application_state.mouse_state.is_down);
-		Clay_UpdateScrollContainers(true, (Clay_Vector2) { 
-				application_state.mouse_state.wheel_x, application_state.mouse_state.wheel_y }, 0.1);
-        
-		Clay_BeginLayout(); 
-        CLAY({ 	
-			.id = CLAY_ID("OuterContainer"), 
-			.layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, 
-			.padding = CLAY_PADDING_ALL(16), 
-			.childGap = 16 }, 
-			.backgroundColor = {250,250,255,255} }) {
-            CLAY({
-                .id = CLAY_ID("SideBar"),
-                .layout = { .layoutDirection = CLAY_TOP_TO_BOTTOM, 
-				.sizing = { .width = CLAY_SIZING_FIXED(300), 
-				.height = CLAY_SIZING_GROW(0) }, 
-				.padding = CLAY_PADDING_ALL(16), 
-				.childGap = 16 },
-                .backgroundColor = COLOR_LIGHT
-            }){
-            	CLAY({
-					.id = CLAY_ID("MainContent"), 
-					.layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, 
-					.backgroundColor = COLOR_LIGHT }){}
-        	}
-		}
-		Clay_RenderCommandArray render_commands = Clay_EndLayout();
+		clay_frame_update(&application_state); // update layout size & mouse state after handling events
+	
+		Clay_RenderCommandArray render_commands = main_layout();
     	
-		SDL_SetRenderDrawColor(application_state.renderer_data.renderer, 0, 0, 0, 255);
-    	SDL_RenderClear(application_state.renderer_data.renderer);
-		SDL_Clay_RenderClayCommands(&application_state.renderer_data, &render_commands);
-		SDL_RenderPresent(application_state.renderer_data.renderer);
+		render(&application_state, render_commands);	
 	}
 
     // Cleanup
