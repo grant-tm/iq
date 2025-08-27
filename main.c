@@ -27,6 +27,29 @@ typedef struct ApplicationState {
 	MouseState mouse_state;
 } ApplicationState;
 
+void clay_error_handler(Clay_ErrorData errorData) {
+    printf("%s", errorData.errorText.chars);
+    //switch(errorData.errorType) {}
+}
+
+void clay_frame_update(ApplicationState *application_state) {
+	
+	i32 screen_width, screen_height;
+	SDL_GetWindowSize(application_state->window, &screen_width, &screen_height);    
+	Clay_SetLayoutDimensions((Clay_Dimensions) { screen_width, screen_height });
+	
+	Clay_SetPointerState((Clay_Vector2) { 
+		application_state->mouse_state.position_x, 
+		application_state->mouse_state.position_y }, 
+		application_state->mouse_state.is_down);
+	
+	f32 delta_time = 0.1; // TODO: tie to frame rate?
+	Clay_UpdateScrollContainers(true, (Clay_Vector2) { 
+		application_state->mouse_state.wheel_x, 
+		application_state->mouse_state.wheel_y }, 
+		delta_time);
+}
+
 void sdl_event_handler (ApplicationState *app, SDL_Event *event) {
 	switch (event->type) {
 		case SDL_EVENT_QUIT:
@@ -59,6 +82,13 @@ void sdl_event_handler (ApplicationState *app, SDL_Event *event) {
 	}
 }
 
+void render (ApplicationState *application_state, Clay_RenderCommandArray render_commands) {
+	SDL_SetRenderDrawColor(application_state->renderer_data.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(application_state->renderer_data.renderer);
+	SDL_Clay_RenderClayCommands(&application_state->renderer_data, &render_commands);
+	SDL_RenderPresent(application_state->renderer_data.renderer);
+}
+
 i32 main(i32 argc, char *argv[]) {
 	xtd_ignore_unused(argc);
 	xtd_ignore_unused(argv);
@@ -81,9 +111,6 @@ i32 main(i32 argc, char *argv[]) {
 	u64 clay_memory_size = Clay_MinMemorySize();
 	application_state.clay_arena = Clay_CreateArenaWithCapacityAndMemory(clay_memory_size, malloc(clay_memory_size));
     Clay_Initialize(application_state.clay_arena, (Clay_Dimensions) { 960, 540 }, (Clay_ErrorHandler) { clay_error_handler, 0 });
-	
-	// Initialize application state
-	//application_state.mouse_state = {0};
 
     application_state.running = true;
     while (application_state.running) {
