@@ -130,22 +130,24 @@ SDL_AppResult SDL_AppEvent(void *s, SDL_Event *event) {
         app->mouse_state.position_y = event->motion.y;
         //app->redraw = true;
         break;
-
     case SDL_EVENT_MOUSE_WHEEL:
         app->mouse_state.wheel_x = event->wheel.x;
         app->mouse_state.wheel_y = event->wheel.y;
         //app->redraw = true;
         break;
-
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
         app->mouse_state.is_down = true;
         //app->redraw = true;
         break;
-
     case SDL_EVENT_MOUSE_BUTTON_UP:
         app->mouse_state.is_down = false;
         //app->redraw = true;
         break;
+
+	case SDL_EVENT_KEY_DOWN:
+		if (event->key.key == SDLK_ESCAPE) {
+			return SDL_APP_SUCCESS;
+		}
     }
     return SDL_APP_CONTINUE;
 }
