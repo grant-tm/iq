@@ -87,7 +87,7 @@ SDL_AppResult SDL_AppInit(void **out_state, int argc, char **argv) {
     if (!SDL_CreateWindowAndRenderer(
 			"IQ",
             960, 540,
-            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE,
+            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS,
             &app->window,
             &app->renderer))
         return SDL_APP_FAILURE;
