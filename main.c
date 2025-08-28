@@ -1,6 +1,8 @@
 #define XTDLIB_IMPLEMENTATION
 #include "xtdlib.h"
 
+#define SDL_MAIN_USE_CALLBACKS 1
+#include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
 
@@ -11,125 +13,152 @@
 #include "layouts.h"
 
 typedef struct MouseState {
-	i32 position_x;
-	i32 position_y;
-	i32 wheel_x;
-	i32 wheel_y;
-	bool is_down;
+    i32 position_x;
+    i32 position_y;
+    i32 wheel_x;
+    i32 wheel_y;
+    bool is_down;
 } MouseState;
 
 typedef struct ApplicationState {
-	bool running;
+
+	bool redraw;
+    
 	SDL_Window *window;
-	SDL_GLContext gl_context;
+    SDL_Renderer *renderer;
+    SDL_GLContext gl_context;
+    
 	Clay_SDL3RendererData renderer_data;
-	Clay_Arena clay_arena;
+    Clay_Arena clay_arena;
+    
 	MouseState mouse_state;
+
 } ApplicationState;
 
-void clay_error_handler(Clay_ErrorData errorData) {
-    printf("%s", errorData.errorText.chars);
-    //switch(errorData.errorType) {}
+void clay_error_handler (Clay_ErrorData errorData) {
+    printf("%s\n", errorData.errorText.chars);
 }
 
-void clay_frame_update(ApplicationState *application_state) {
-	
-	i32 screen_width, screen_height;
-	SDL_GetWindowSize(application_state->window, &screen_width, &screen_height);    
-	Clay_SetLayoutDimensions((Clay_Dimensions) { screen_width, screen_height });
-	
-	Clay_SetPointerState((Clay_Vector2) { 
-		application_state->mouse_state.position_x, 
-		application_state->mouse_state.position_y }, 
-		application_state->mouse_state.is_down);
-	
-	f32 delta_time = 0.1; // TODO: tie to frame rate?
-	Clay_UpdateScrollContainers(true, (Clay_Vector2) { 
-		application_state->mouse_state.wheel_x, 
-		application_state->mouse_state.wheel_y }, 
-		delta_time);
+static void update_clay_dimensions_and_mouse_state (ApplicationState *app) {
+    i32 screen_width, screen_height;
+    SDL_GetWindowSize(app->window, &screen_width, &screen_height);
+    Clay_SetLayoutDimensions((Clay_Dimensions){ screen_width, screen_height });
+
+    Clay_SetPointerState(
+        (Clay_Vector2){ app->mouse_state.position_x, app->mouse_state.position_y },
+        app->mouse_state.is_down
+    );
+
+    float dt = 0.1f; // TODO: measure real frame delta
+    Clay_UpdateScrollContainers(
+        true,
+        (Clay_Vector2){ app->mouse_state.wheel_x, app->mouse_state.wheel_y },
+        dt
+    );
 }
 
-void sdl_event_handler (ApplicationState *app, SDL_Event *event) {
-	switch (event->type) {
-		case SDL_EVENT_QUIT:
-		{
-			app->running = false;
-			break;
-		}
-		case SDL_EVENT_MOUSE_MOTION:
-		{
-			app->mouse_state.position_x = event->motion.x;
-			app->mouse_state.position_y = event->motion.y;
-			break;
-		}
-		case SDL_EVENT_MOUSE_WHEEL:
-		{
-			app->mouse_state.wheel_x = event->wheel.x;
-			app->mouse_state.wheel_y = event->wheel.y;
-			break;
-		}
-		case SDL_EVENT_MOUSE_BUTTON_DOWN:
-		{
-			app->mouse_state.is_down = true;
-			break;
-		}
-		case SDL_EVENT_MOUSE_BUTTON_UP:
-		{
-			app->mouse_state.is_down = false;
-			break;
-		}
-	}
+static void render (ApplicationState *app) {
+    Clay_RenderCommandArray cmds = main_layout();
+
+    SDL_SetRenderDrawColor(app->renderer, 0, 0, 0, 255);
+    SDL_RenderClear(app->renderer);
+
+    SDL_Clay_RenderClayCommands(&app->renderer_data, &cmds);
+
+    SDL_RenderPresent(app->renderer);
 }
 
-void render (ApplicationState *application_state, Clay_RenderCommandArray render_commands) {
-	SDL_SetRenderDrawColor(application_state->renderer_data.renderer, 0, 0, 0, 255);
-    SDL_RenderClear(application_state->renderer_data.renderer);
-	SDL_Clay_RenderClayCommands(&application_state->renderer_data, &render_commands);
-	SDL_RenderPresent(application_state->renderer_data.renderer);
-}
+//=============================================================================
+// SDL CALLBACKS
+//=============================================================================
 
-i32 main(i32 argc, char *argv[]) {
+SDL_AppResult SDL_AppInit(void **out_state, int argc, char **argv) {
 	xtd_ignore_unused(argc);
 	xtd_ignore_unused(argv);
 
-	ApplicationState application_state;
+    ApplicationState *app = SDL_malloc(sizeof(ApplicationState));
+    if (!app) return SDL_APP_FAILURE;
+    SDL_memset(app, 0, sizeof(*app));
+    *out_state = app;
 
-	// Initialize SDL
-	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
-	SDL_CreateWindowAndRenderer(
-        "SDL3 OpenGL Test",
-        960, 540,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE,
-		&application_state.window,
-		&application_state.renderer_data.renderer
-    );
-    SDL_SetWindowTitle(application_state.window, "IQ");
-    application_state.gl_context = SDL_GL_CreateContext(application_state.window);
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS))
+        return SDL_APP_FAILURE;
 
-	// Initialize Clay
-	u64 clay_memory_size = Clay_MinMemorySize();
-	application_state.clay_arena = Clay_CreateArenaWithCapacityAndMemory(clay_memory_size, malloc(clay_memory_size));
-    Clay_Initialize(application_state.clay_arena, (Clay_Dimensions) { 960, 540 }, (Clay_ErrorHandler) { clay_error_handler, 0 });
+    if (!SDL_CreateWindowAndRenderer(
+			"IQ",
+            960, 540,
+            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE,
+            &app->window,
+            &app->renderer))
+        return SDL_APP_FAILURE;
 
-    application_state.running = true;
-    while (application_state.running) {
-		
-		SDL_Event event;
-		while (SDL_PollEvent(&event)) {
-        	sdl_event_handler(&application_state, &event);    
-        }
-		clay_frame_update(&application_state); // update layout size & mouse state after handling events
-	
-		Clay_RenderCommandArray render_commands = main_layout();
-    	
-		render(&application_state, render_commands);	
-	}
+    app->gl_context = SDL_GL_CreateContext(app->window);
+    app->renderer_data.renderer = app->renderer;
 
-    // Cleanup
-    SDL_GL_DestroyContext(application_state.gl_context);
-    SDL_DestroyWindow(application_state.window);
+    size_t clay_mem_size = Clay_MinMemorySize();
+    app->clay_arena = Clay_CreateArenaWithCapacityAndMemory(clay_mem_size, malloc(clay_mem_size));
+    Clay_Initialize(app->clay_arena, (Clay_Dimensions){960, 540}, (Clay_ErrorHandler){ clay_error_handler, 0 });
+
+    app->redraw = true;
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppIterate(void *s) {
+    ApplicationState *app = (ApplicationState*)s;
+    if (app->redraw) {
+        update_clay_dimensions_and_mouse_state(app);
+        render(app);
+        app->redraw = false;
+    }
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppEvent(void *s, SDL_Event *event) {
+    ApplicationState *app = (ApplicationState*)s;
+    switch (event->type) {
+    
+	case SDL_EVENT_QUIT:
+        return SDL_APP_SUCCESS;
+
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+    case SDL_EVENT_WINDOW_RESIZED:
+        app->redraw = true;
+        break;
+
+    case SDL_EVENT_MOUSE_MOTION:
+        app->mouse_state.position_x = event->motion.x;
+        app->mouse_state.position_y = event->motion.y;
+        //app->redraw = true;
+        break;
+
+    case SDL_EVENT_MOUSE_WHEEL:
+        app->mouse_state.wheel_x = event->wheel.x;
+        app->mouse_state.wheel_y = event->wheel.y;
+        //app->redraw = true;
+        break;
+
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        app->mouse_state.is_down = true;
+        //app->redraw = true;
+        break;
+
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        app->mouse_state.is_down = false;
+        //app->redraw = true;
+        break;
+    }
+    return SDL_APP_CONTINUE;
+}
+
+void SDL_AppQuit(void *s, SDL_AppResult result) {
+    xtd_ignore_unused(result);
+
+	ApplicationState *app = (ApplicationState*)s;
+    if (!app) return;
+
+    if (app->gl_context) SDL_GL_DestroyContext(app->gl_context);
+    if (app->window) SDL_DestroyWindow(app->window);
     SDL_Quit();
 
-    return 0;
+    SDL_free(app);
 }
