@@ -59,6 +59,7 @@ typedef struct ApplicationState {
 	MouseState mouse_state;
 	ResizeMode resize_mode;
 	bool resize_started_from_hit_test;
+	bool drag_started_from_hit_test;
 	i32 window_resize_start_x;
 	i32 window_resize_start_y;
 	i32 window_resize_start_w;
@@ -185,8 +186,9 @@ void check_resizing (ApplicationState *app) {
 
 void handle_resizing (ApplicationState *app) {
 	
-	// stop resizing when mouse is released
-	if (!app->mouse_state.is_down) {
+	if (!app->mouse_state.is_down ||
+		!app->resize_started_from_hit_test ||
+		app->drag_started_from_hit_test) {
 		return;
 	}
 	
@@ -241,15 +243,101 @@ void handle_resizing (ApplicationState *app) {
     default: break;
 	}
 
-	// enforce minimum size
-	if (new_w < 100) { new_w = 100; }
-	if (new_h < 100) { new_h = 100; }
+	i32 minimum_width = 430;
+	i32 minimum_height = 270;
 
-	// apply new geometry
+	if (new_w <= minimum_width) {
+		new_w = minimum_width;
+		switch (app->resize_mode) {
+		
+		case RESIZE_BOTTOM_LEFT:
+		case RESIZE_TOP_LEFT:
+		case RESIZE_LEFT:
+			new_x = (window_x + window_w) - minimum_width;
+			break;
+		
+		case RESIZE_BOTTOM_RIGHT:
+		case RESIZE_TOP_RIGHT:
+		case RESIZE_RIGHT:
+			new_x = window_x;
+			break;
+		
+		default:
+			break;
+		}
+	}
+	
+	if (new_h <= minimum_height) {
+		new_h = minimum_height;
+		switch (app->resize_mode) {
+		
+		case RESIZE_TOP_RIGHT:
+		case RESIZE_TOP_LEFT:
+		case RESIZE_TOP:
+			new_y = (window_y + window_h) - minimum_height;
+			break;
+		
+		case RESIZE_BOTTOM_RIGHT:
+		case RESIZE_BOTTOM_LEFT:
+		case RESIZE_BOTTOM:
+			new_y = window_y;
+			break;
+		
+		default:
+			break;
+		}
+	}
+
 	SDL_SetWindowPosition(app->window, new_x, new_y);
 	SDL_SetWindowSize(app->window, new_w, new_h);
 }
 
+bool check_dragging (ApplicationState *app) {
+	
+	if (app->drag_started_from_hit_test || app->resize_mode != NOT_RESIZING) {
+		return false;
+	}
+	
+	i32 cursor_x = app->mouse_state.position_x;
+	i32 cursor_y = app->mouse_state.position_y;
+
+	Clay_ElementData banner_data = Clay_GetElementData(CLAY_ID("ApplicationBanner"));
+	xtd_assert(banner_data.found == true);
+	
+	Clay_BoundingBox banner_bounding_box = banner_data.boundingBox;
+
+	i32 drag_area_left_x = banner_bounding_box.x;
+	i32 drag_area_top_y = banner_bounding_box.y;
+	i32 drag_area_right_x = banner_bounding_box.x + banner_bounding_box.width;
+	i32 drag_area_bottom_y = banner_bounding_box.y + banner_bounding_box.height;
+
+	bool cursor_within_drag_area = 
+		xtd_is_between(cursor_x, drag_area_left_x, drag_area_right_x) && 
+		xtd_is_between(cursor_y, drag_area_top_y, drag_area_bottom_y);
+	
+	return cursor_within_drag_area;
+}
+
+void handle_dragging(ApplicationState *app) {
+    
+	if (!app->mouse_state.is_down || 
+		!app->drag_started_from_hit_test ||
+		app->resize_started_from_hit_test) { 
+		return;
+    }
+	
+	i32 window_x = app->window_resize_start_x;
+	i32 window_y = app->window_resize_start_y;
+
+	i32 dx = app->mouse_state.global_position_x - app->mouse_state.global_drag_start_x; 
+	i32 dy = app->mouse_state.global_position_y - app->mouse_state.global_drag_start_y;
+	
+	i32 new_x = window_x + dx;
+	i32 new_y = window_y + dy;
+
+    SDL_SetWindowPosition(app->window, new_x, new_y);
+}
+	
 //=============================================================================
 // SDL CALLBACKS
 //=============================================================================
@@ -291,17 +379,20 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
 }
 
 SDL_AppResult SDL_AppIterate (void *s) {
-    ApplicationState *app = (ApplicationState*)s;
+    ApplicationState *app = (ApplicationState *) s;
     
-	check_resizing(app);
-	
 
 	if (app->redraw) {
         update_clay_dimensions_and_mouse_state(app);
         render(app);
         app->redraw = false;
     }
-    return SDL_APP_CONTINUE;
+    
+	check_resizing(app);
+	check_dragging(app);
+	
+	SDL_Delay(4);
+	return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
@@ -317,38 +408,50 @@ SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
         break;
 
     case SDL_EVENT_MOUSE_MOTION:
-        f32 global_x, global_y;
+    	
+		app->mouse_state.position_x = event->motion.x;
+    	app->mouse_state.position_y = event->motion.y;
+    	
+		f32 global_x, global_y;
 		SDL_GetGlobalMouseState(&global_x, &global_y);
 		app->mouse_state.global_position_x = (i32) global_x;
-		app->mouse_state.global_position_y = (i32) global_y;
-		
-		app->mouse_state.position_x = event->motion.x;
-        app->mouse_state.position_y = event->motion.y;
-        handle_resizing(app);
+    	app->mouse_state.global_position_y = (i32) global_y;
+
+    	handle_resizing(app);
+    	handle_dragging(app);
+    	
 		break;
+
     case SDL_EVENT_MOUSE_WHEEL:
         app->mouse_state.wheel_x = event->wheel.x;
         app->mouse_state.wheel_y = event->wheel.y;
         break;
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    
+	case SDL_EVENT_MOUSE_BUTTON_DOWN:
         app->mouse_state.is_down = true;
-		
+	
 		app->mouse_state.global_drag_start_x = app->mouse_state.global_position_x;
 		app->mouse_state.global_drag_start_y = app->mouse_state.global_position_y;
 		app->mouse_state.drag_start_x = app->mouse_state.position_x;
 		app->mouse_state.drag_start_y = app->mouse_state.position_y;
-        
+       	
 		if (app->resize_mode != NOT_RESIZING) {
 			SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
 			SDL_GetWindowSize(app->window, &app->window_resize_start_w, &app->window_resize_start_h);
 			app->resize_started_from_hit_test = true;
-		}	
+		}
+		
+		if (!app->drag_started_from_hit_test && check_dragging(app)) {
+			SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
+			app->drag_started_from_hit_test = true;
+		}
 		
 		break;
     case SDL_EVENT_MOUSE_BUTTON_UP:
         app->mouse_state.is_down = false;
 		app->resize_started_from_hit_test = false;
-        break;
+		app->drag_started_from_hit_test = false;
+		break;
 
 	case SDL_EVENT_KEY_DOWN:
 		if (event->key.key == SDLK_ESCAPE) {
