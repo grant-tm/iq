@@ -12,6 +12,10 @@
 
 #include "layouts.h"
 
+//=============================================================================
+// APPLICATION STATE
+//=============================================================================
+
 typedef struct MouseState {
     i32 global_position_x;
 	i32 global_position_y;
@@ -61,6 +65,10 @@ typedef struct ApplicationState {
 	i32 window_resize_start_h;
 
 } ApplicationState;
+
+//=============================================================================
+// UPDATE AND RENDER
+//=============================================================================
 
 void clay_error_handler (Clay_ErrorData errorData) {
     printf("%s\n", errorData.errorText.chars);
