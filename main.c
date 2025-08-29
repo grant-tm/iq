@@ -95,8 +95,13 @@ static void render (ApplicationState *app) {
     SDL_RenderPresent(app->renderer);
 }
 
+//=============================================================================
+// WINDOW BEHAVIOR
+//=============================================================================
+
 void check_resizing (ApplicationState *app) {
 
+	// skip edge/corner hit testing if currently engaged in resize
 	if (app->resize_started_from_hit_test) {
 		return;
 	}
@@ -172,6 +177,7 @@ void check_resizing (ApplicationState *app) {
 
 void handle_resizing (ApplicationState *app) {
 	
+	// stop resizing when mouse is released
 	if (!app->mouse_state.is_down) {
 		return;
 	}
@@ -257,8 +263,13 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
             960, 540,
             SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS,
             &app->window,
-            &app->renderer))
+            &app->renderer)) {
         return SDL_APP_FAILURE;
+	}
+	
+	SDL_SetWindowMinimumSize(app->window, 430, 270);
+	SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
+	SDL_GetWindowSize(app->window, &app->window_resize_start_w, &app->window_resize_start_h);
 
     app->gl_context = SDL_GL_CreateContext(app->window);
     app->renderer_data.renderer = app->renderer;
