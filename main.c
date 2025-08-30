@@ -47,8 +47,6 @@ typedef enum ResizeMode {
 
 typedef struct ApplicationState {
 
-	bool redraw;
-    
 	SDL_Window *window;
     SDL_Renderer *renderer;
     SDL_GLContext gl_context;
@@ -374,20 +372,15 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
     app->clay_arena = Clay_CreateArenaWithCapacityAndMemory(clay_mem_size, malloc(clay_mem_size));
     Clay_Initialize(app->clay_arena, (Clay_Dimensions){960, 540}, (Clay_ErrorHandler){ clay_error_handler, 0 });
 
-    app->redraw = true;
     return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppIterate (void *s) {
     ApplicationState *app = (ApplicationState *) s;
-    
+    	
+	update_clay_dimensions_and_mouse_state(app);
+	render(app);
 
-	if (app->redraw) {
-        update_clay_dimensions_and_mouse_state(app);
-        render(app);
-        app->redraw = false;
-    }
-    
 	check_resizing(app);
 	check_dragging(app);
 	
@@ -404,7 +397,6 @@ SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
 
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
     case SDL_EVENT_WINDOW_RESIZED:
-        app->redraw = true;
         break;
 
     case SDL_EVENT_MOUSE_MOTION:
