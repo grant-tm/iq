@@ -50,6 +50,7 @@ typedef struct ApplicationState {
 	SDL_Window *window;
     SDL_Renderer *renderer;
     SDL_GLContext gl_context;
+	SDL_Texture **icons;
     
 	Clay_SDL3RendererData renderer_data;
     Clay_Arena clay_arena;
@@ -106,7 +107,7 @@ static void update_clay_dimensions_and_mouse_state (ApplicationState *app) {
 }
 
 static void render (ApplicationState *app) {
-    Clay_RenderCommandArray cmds = main_layout();
+    Clay_RenderCommandArray cmds = main_layout(app->icons);
 
     SDL_SetRenderDrawColor(app->renderer_data.renderer, 0, 0, 0, 255);
     SDL_RenderClear(app->renderer_data.renderer);
@@ -313,15 +314,15 @@ bool check_dragging (ApplicationState *app) {
 	i32 cursor_x = app->mouse_state.position_x;
 	i32 cursor_y = app->mouse_state.position_y;
 
-	Clay_ElementData banner_data = Clay_GetElementData(CLAY_ID("ApplicationBanner"));
-	xtd_assert(banner_data.found == true);
+	Clay_ElementData header_data = Clay_GetElementData(CLAY_ID("ApplicationHeader"));
+	xtd_assert(header_data.found == true);
 	
-	Clay_BoundingBox banner_bounding_box = banner_data.boundingBox;
+	Clay_BoundingBox header_bounding_box = header_data.boundingBox;
 
-	i32 drag_area_left_x = banner_bounding_box.x;
-	i32 drag_area_top_y = banner_bounding_box.y;
-	i32 drag_area_right_x = banner_bounding_box.x + banner_bounding_box.width;
-	i32 drag_area_bottom_y = banner_bounding_box.y + banner_bounding_box.height;
+	i32 drag_area_left_x = header_bounding_box.x;
+	i32 drag_area_top_y = header_bounding_box.y;
+	i32 drag_area_right_x = header_bounding_box.x + header_bounding_box.width;
+	i32 drag_area_bottom_y = header_bounding_box.y + header_bounding_box.height;
 
 	bool cursor_within_drag_area = 
 		xtd_is_between(cursor_x, drag_area_left_x, drag_area_right_x) && 
@@ -379,25 +380,50 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
         return SDL_APP_FAILURE;
 	}
 	
+	// -- Initialize Text Engine -----------------------------
 	app->renderer_data.textEngine = TTF_CreateRendererTextEngine(app->renderer_data.renderer);
     if (!app->renderer_data.textEngine) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to create text engine from renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-
-    app->renderer_data.fonts = SDL_calloc(1, sizeof(TTF_Font *));
+    app->renderer_data.fonts = SDL_calloc(FONT_ID_NUM_FONT_IDS, sizeof(TTF_Font *));
     if (!app->renderer_data.fonts) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to allocate memory for the font array: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    TTF_Font *font = TTF_OpenFont("resources/Roboto-Regular.ttf", 24);
-    if (!font) {
+	// -- Load Fonts -----------------------------------------
+    TTF_Font *roboto_regular = TTF_OpenFont("resources/Roboto/Roboto-Regular.ttf", 24);
+    if (!roboto_regular) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
+    app->renderer_data.fonts[FONT_ID_ROBOTO_REGULAR] = roboto_regular;
 
-    app->renderer_data.fonts[0] = font;
+	TTF_Font *icons = TTF_OpenFont("resources/Material-Design-Iconic-Font.ttf", 24);
+    if (!icons) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    app->renderer_data.fonts[FONT_ID_ICONS] = icons;
+
+	// -- Load SVG Icons ----------------------------------
+	app->icons = SDL_calloc(NUM_ICON_IDS, sizeof(SDL_Texture *));
+	app->icons[ICON_ID_CLOSE] = IMG_LoadTexture(app->renderer_data.renderer, "resources/icons/close.svg");
+    if (!app->icons[ICON_ID_CLOSE]) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+	app->icons[ICON_ID_MAXIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, "resources/icons/square.svg");
+    if (!app->icons[ICON_ID_MAXIMIZE]) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+	app->icons[ICON_ID_MINIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, "resources/icons/minimize.svg");
+    if (!app->icons[ICON_ID_MINIMIZE]) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
 
 	SDL_SetWindowMinimumSize(app->window, 430, 270);
 	SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
@@ -446,10 +472,11 @@ SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
 		SDL_GetGlobalMouseState(&global_x, &global_y);
 		app->mouse_state.global_position_x = (i32) global_x;
     	app->mouse_state.global_position_y = (i32) global_y;
-
-    	handle_resizing(app);
+		
+		handle_resizing(app);
     	handle_dragging(app);
-    	
+		
+		Clay_SetPointerState((Clay_Vector2) { event->motion.x, event->motion.y }, app->mouse_state.is_down);
 		break;
 
     case SDL_EVENT_MOUSE_WHEEL:
