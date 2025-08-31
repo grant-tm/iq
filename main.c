@@ -16,6 +16,30 @@
 // APPLICATION STATE
 //=============================================================================
 
+typedef enum EdgeMask {
+	EDGE_NONE 	= 0,
+	EDGE_LEFT 	= 1 << 0,
+	EDGE_RIGHT 	= 1 << 1,
+	EDGE_TOP 	= 1 << 2,
+	EDGE_BOTTOM = 1 << 3 
+} EdgeMask;
+
+typedef struct ResizeRule {
+	EdgeMask edge_mask;
+	SDL_SystemCursor system_cursor;
+} ResizeRule;
+
+static const ResizeRule resize_rules[] = {
+	{ EDGE_LEFT,                     SDL_SYSTEM_CURSOR_EW_RESIZE	},
+    { EDGE_RIGHT,                    SDL_SYSTEM_CURSOR_EW_RESIZE	},
+    { EDGE_TOP,                      SDL_SYSTEM_CURSOR_NS_RESIZE	},
+    { EDGE_BOTTOM,                   SDL_SYSTEM_CURSOR_NS_RESIZE	},
+    { EDGE_LEFT  | EDGE_TOP,         SDL_SYSTEM_CURSOR_NWSE_RESIZE	},
+    { EDGE_RIGHT | EDGE_TOP,         SDL_SYSTEM_CURSOR_NESW_RESIZE	},
+    { EDGE_LEFT  | EDGE_BOTTOM,      SDL_SYSTEM_CURSOR_NESW_RESIZE	},
+    { EDGE_RIGHT | EDGE_BOTTOM,      SDL_SYSTEM_CURSOR_NWSE_RESIZE	},
+};
+
 typedef struct MouseState {
     i32 global_position_x;
 	i32 global_position_y;
@@ -33,18 +57,6 @@ typedef struct MouseState {
 
 } MouseState;
 
-typedef enum ResizeMode {
-	NOT_RESIZING,
-	RESIZE_LEFT,
-	RESIZE_RIGHT,
-	RESIZE_TOP,
-	RESIZE_BOTTOM,
-	RESIZE_TOP_LEFT,
-	RESIZE_TOP_RIGHT,
-	RESIZE_BOTTOM_LEFT,
-	RESIZE_BOTTOM_RIGHT
-} ResizeMode;
-
 typedef struct ApplicationState {
 
 	SDL_Window *window;
@@ -54,9 +66,10 @@ typedef struct ApplicationState {
     
 	Clay_SDL3RendererData renderer_data;
     Clay_Arena clay_arena;
-    
+ 	
+	SDL_Cursor *cursors[SDL_SYSTEM_CURSOR_COUNT];
 	MouseState mouse_state;
-	ResizeMode resize_mode;
+	EdgeMask resize_mode;
 	bool resize_started_from_hit_test;
 	bool drag_started_from_hit_test;
 	i32 window_resize_start_x;
@@ -121,193 +134,94 @@ static void render (ApplicationState *app) {
 // WINDOW BEHAVIOR
 //=============================================================================
 
-void check_resizing (ApplicationState *app) {
-
-	// skip edge/corner hit testing if currently engaged in resize
+bool check_resizing (ApplicationState *app) {
+	
+	//skip edge/corner hit testing if currently engaged in resize
 	if (app->resize_started_from_hit_test) {
-		return;
+		return false;
 	}
-
+	
 	f32 cursor_x, cursor_y;
 	SDL_GetGlobalMouseState(&cursor_x, &cursor_y);
 
 	SDL_Window *window = app->window;
 
-	i32 window_left_x, window_top_y;
+	i32 window_left_x, window_top_y, window_width, window_height;
 	SDL_GetWindowPosition(window, &window_left_x, &window_top_y);
-	
-	i32 window_width, window_height;
 	SDL_GetWindowSize(window, &window_width, &window_height);
-
 	i32 window_right_x = window_left_x + window_width;
 	i32 window_bottom_y = window_top_y + window_height;
-	
 	i32 margin = 6;
 
-	bool cursor_on_left_axis = xtd_is_within_margin(cursor_x, window_left_x, margin);
-	bool cursor_on_right_axis = xtd_is_within_margin(cursor_x, window_right_x, margin);
-	bool cursor_on_top_axis = xtd_is_within_margin(cursor_y, window_top_y, margin);
-	bool cursor_on_bottom_axis = xtd_is_within_margin(cursor_y, window_bottom_y, margin);
 
-	bool cursor_on_left_edge = cursor_on_left_axis && xtd_is_between(cursor_y, window_top_y, window_bottom_y);
-	bool cursor_on_right_edge = cursor_on_right_axis && xtd_is_between(cursor_y, window_top_y, window_bottom_y);
-	bool cursor_on_top_edge = cursor_on_top_axis && xtd_is_between(cursor_x, window_left_x, window_right_x);
-	bool cursor_on_bottom_edge = cursor_on_bottom_axis && xtd_is_between(cursor_x, window_left_x, window_right_x);
+	b32 mask = EDGE_NONE;
+    if (xtd_is_within_margin(cursor_x, window_left_x, 	margin)) mask |= EDGE_LEFT;
+    if (xtd_is_within_margin(cursor_x, window_right_x,	margin)) mask |= EDGE_RIGHT;
+    if (xtd_is_within_margin(cursor_y, window_top_y, 	margin)) mask |= EDGE_TOP;
+    if (xtd_is_within_margin(cursor_y, window_bottom_y, margin)) mask |= EDGE_BOTTOM;
 
-	bool cursor_on_top_left_corner = cursor_on_left_edge && cursor_on_top_edge;
-	bool cursor_on_top_right_corner = cursor_on_right_edge && cursor_on_top_edge;
-	bool cursor_on_bottom_right_corner = cursor_on_right_edge && cursor_on_bottom_edge;
-	bool cursor_on_bottom_left_corner = cursor_on_left_edge && cursor_on_bottom_edge;
-	bool cursor_on_corner = cursor_on_top_left_corner || cursor_on_top_right_corner || cursor_on_bottom_left_corner || cursor_on_bottom_right_corner;
+	SDL_Cursor *cursor = app->cursors[SDL_SYSTEM_CURSOR_DEFAULT];
+	
+	for (u32 i = 0; i < SDL_arraysize(resize_rules); i++) {
+        if (resize_rules[i].edge_mask == mask) {
+            cursor = app->cursors[resize_rules[i].system_cursor];
+            break;
+        }
+    }
 
-	if (cursor_on_left_edge && !cursor_on_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE));
-		app->resize_mode = RESIZE_LEFT;
-	}
-	else if (cursor_on_right_edge && !cursor_on_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE));
-		app->resize_mode = RESIZE_RIGHT;
-	}
-	else if (cursor_on_top_edge && !cursor_on_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NS_RESIZE));
-		app->resize_mode = RESIZE_TOP;
-	}
-	else if (cursor_on_bottom_edge && !cursor_on_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NS_RESIZE));
-		app->resize_mode = RESIZE_BOTTOM;
-	}
-	else if (cursor_on_top_left_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NWSE_RESIZE));
-		app->resize_mode = RESIZE_TOP_LEFT;
-	}
-	else if (cursor_on_top_right_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NESW_RESIZE));
-		app->resize_mode = RESIZE_TOP_RIGHT;
-	}
-	else if (cursor_on_bottom_left_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NESW_RESIZE));
-		app->resize_mode = RESIZE_BOTTOM_LEFT;
-	}
-	else if (cursor_on_bottom_right_corner) {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NWSE_RESIZE));
-		app->resize_mode = RESIZE_BOTTOM_RIGHT;
-	} else {
-		SDL_SetCursor(SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT));
-		app->resize_mode = NOT_RESIZING;
-	}
+	SDL_SetCursor(cursor);
+	app->resize_mode = mask;
+	return (mask == 0);
 }
 
 void handle_resizing (ApplicationState *app) {
-	
-	if (!app->mouse_state.is_down ||
-		!app->resize_started_from_hit_test ||
-		app->drag_started_from_hit_test) {
+    if (!app->mouse_state.is_down || !app->resize_started_from_hit_test || app->drag_started_from_hit_test) {
 		return;
 	}
-	
-	i32 window_x = app->window_resize_start_x;
-	i32 window_y = app->window_resize_start_y;
-	i32 window_w = app->window_resize_start_w;
-	i32 window_h = app->window_resize_start_h;
 
-	i32 dx = app->mouse_state.global_position_x - app->mouse_state.global_drag_start_x; 
-	i32 dy = app->mouse_state.global_position_y - app->mouse_state.global_drag_start_y;
-	
-	i32 new_x = window_x;
-	i32 new_y = window_y;
-	i32 new_w = window_w;
-	i32 new_h = window_h;
+    i32 dx = app->mouse_state.global_position_x - app->mouse_state.global_drag_start_x; 
+    i32 dy = app->mouse_state.global_position_y - app->mouse_state.global_drag_start_y;
 
-	switch (app->resize_mode) {
-    case RESIZE_LEFT:
-        new_x = window_x + dx;
-        new_w = window_w - dx;
-		break;
-    case RESIZE_RIGHT:
-        new_w = window_w + dx;
-        break;
-    case RESIZE_TOP:
-        new_y = window_y + dy;
-        new_h = window_h - dy;
-        break;
-	case RESIZE_BOTTOM:
-        new_h = window_h + dy;
-        break;
-    case RESIZE_TOP_LEFT:
-        new_x = window_x + dx;
-        new_w = window_w - dx;
-        new_y = window_y + dy;
-        new_h = window_h - dy;
-        break;
-    case RESIZE_TOP_RIGHT:
-        new_w = window_w + dx;
-        new_y = window_y + dy;
-        new_h = window_h - dy;
-        break;
-    case RESIZE_BOTTOM_LEFT:
-        new_x = window_x + dx;
-        new_w = window_w - dx;
-        new_h = window_h + dy;
-        break;
-    case RESIZE_BOTTOM_RIGHT:
-        new_w = window_w + dx;
-        new_h = window_h + dy;
-        break;
-    default: break;
-	}
+    i32 new_x = app->window_resize_start_x;
+    i32 new_y = app->window_resize_start_y;
+    i32 new_w = app->window_resize_start_w;
+    i32 new_h = app->window_resize_start_h;
 
-	i32 minimum_width = 430;
-	i32 minimum_height = 270;
+    if (app->resize_mode & EDGE_LEFT) {
+        new_x += dx;
+        new_w -= dx;
+    }
+    if (app->resize_mode & EDGE_RIGHT) {
+        new_w += dx;
+    }
+    if (app->resize_mode & EDGE_TOP) {
+        new_y += dy;
+        new_h -= dy;
+    }
+    if (app->resize_mode & EDGE_BOTTOM) {
+        new_h += dy;
+    }
 
-	if (new_w <= minimum_width) {
-		new_w = minimum_width;
-		switch (app->resize_mode) {
-		
-		case RESIZE_BOTTOM_LEFT:
-		case RESIZE_TOP_LEFT:
-		case RESIZE_LEFT:
-			new_x = (window_x + window_w) - minimum_width;
-			break;
-		
-		case RESIZE_BOTTOM_RIGHT:
-		case RESIZE_TOP_RIGHT:
-		case RESIZE_RIGHT:
-			new_x = window_x;
-			break;
-		
-		default:
-			break;
-		}
-	}
-	
-	if (new_h <= minimum_height) {
-		new_h = minimum_height;
-		switch (app->resize_mode) {
-		
-		case RESIZE_TOP_RIGHT:
-		case RESIZE_TOP_LEFT:
-		case RESIZE_TOP:
-			new_y = (window_y + window_h) - minimum_height;
-			break;
-		
-		case RESIZE_BOTTOM_RIGHT:
-		case RESIZE_BOTTOM_LEFT:
-		case RESIZE_BOTTOM:
-			new_y = window_y;
-			break;
-		
-		default:
-			break;
-		}
-	}
+    const i32 min_w = 430, min_h = 270;
 
-	SDL_SetWindowPosition(app->window, new_x, new_y);
-	SDL_SetWindowSize(app->window, new_w, new_h);
+    if (new_w < min_w) {
+        if (app->resize_mode & EDGE_LEFT)
+            new_x = (app->window_resize_start_x + app->window_resize_start_w) - min_w;
+        new_w = min_w;
+    }
+    if (new_h < min_h) {
+        if (app->resize_mode & EDGE_TOP)
+            new_y = (app->window_resize_start_y + app->window_resize_start_h) - min_h;
+        new_h = min_h;
+    }
+
+    SDL_SetWindowPosition(app->window, new_x, new_y);
+    SDL_SetWindowSize(app->window, new_w, new_h);
 }
 
 bool check_dragging (ApplicationState *app) {
 	
-	if (app->drag_started_from_hit_test || app->resize_mode != NOT_RESIZING) {
+	if (app->drag_started_from_hit_test || app->resize_mode != EDGE_NONE) {
 		return false;
 	}
 	
@@ -423,7 +337,11 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
     if (!app->icons[ICON_ID_MINIMIZE]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
-    }
+    }	
+	
+	for (i32 i = 0; i < SDL_SYSTEM_CURSOR_COUNT; i++) {
+		app->cursors[i] = SDL_CreateSystemCursor(i);
+	}
 
 	SDL_SetWindowMinimumSize(app->window, 430, 270);
 	SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
@@ -492,7 +410,7 @@ SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
 		app->mouse_state.drag_start_x = app->mouse_state.position_x;
 		app->mouse_state.drag_start_y = app->mouse_state.position_y;
        	
-		if (app->resize_mode != NOT_RESIZING) {
+		if (!app->resize_started_from_hit_test && app->resize_mode != EDGE_NONE) {
 			SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
 			SDL_GetWindowSize(app->window, &app->window_resize_start_w, &app->window_resize_start_h);
 			app->resize_started_from_hit_test = true;
