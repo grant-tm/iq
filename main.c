@@ -73,6 +73,20 @@ void clay_error_handler (Clay_ErrorData errorData) {
     printf("%s\n", errorData.errorText.chars);
 }
 
+static inline Clay_Dimensions measure_text (Clay_StringSlice text, Clay_TextElementConfig *config, void *userData)
+{
+    TTF_Font **fonts = userData;
+    TTF_Font *font = fonts[config->fontId];
+    int width, height;
+
+    TTF_SetFontSize(font, config->fontSize);
+    if (!TTF_GetStringSize(font, text.chars, text.length, &width, &height)) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to measure text: %s", SDL_GetError());
+    }
+
+    return (Clay_Dimensions) { (float) width, (float) height };
+}
+
 static void update_clay_dimensions_and_mouse_state (ApplicationState *app) {
     i32 screen_width, screen_height;
     SDL_GetWindowSize(app->window, &screen_width, &screen_height);
@@ -94,12 +108,12 @@ static void update_clay_dimensions_and_mouse_state (ApplicationState *app) {
 static void render (ApplicationState *app) {
     Clay_RenderCommandArray cmds = main_layout();
 
-    SDL_SetRenderDrawColor(app->renderer, 0, 0, 0, 255);
-    SDL_RenderClear(app->renderer);
+    SDL_SetRenderDrawColor(app->renderer_data.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(app->renderer_data.renderer);
 
     SDL_Clay_RenderClayCommands(&app->renderer_data, &cmds);
 
-    SDL_RenderPresent(app->renderer);
+    SDL_RenderPresent(app->renderer_data.renderer);
 }
 
 //=============================================================================
@@ -349,6 +363,10 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
     SDL_memset(app, 0, sizeof(*app));
     *out_state = app;
 
+	if (!TTF_Init()) {
+        return SDL_APP_FAILURE;
+    }
+
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS))
         return SDL_APP_FAILURE;
 
@@ -357,20 +375,40 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
             960, 540,
             SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS,
             &app->window,
-            &app->renderer)) {
+            &app->renderer_data.renderer)) {
         return SDL_APP_FAILURE;
 	}
 	
+	app->renderer_data.textEngine = TTF_CreateRendererTextEngine(app->renderer_data.renderer);
+    if (!app->renderer_data.textEngine) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to create text engine from renderer: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    app->renderer_data.fonts = SDL_calloc(1, sizeof(TTF_Font *));
+    if (!app->renderer_data.fonts) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to allocate memory for the font array: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    TTF_Font *font = TTF_OpenFont("resources/Roboto-Regular.ttf", 24);
+    if (!font) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    app->renderer_data.fonts[0] = font;
+
 	SDL_SetWindowMinimumSize(app->window, 430, 270);
 	SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
 	SDL_GetWindowSize(app->window, &app->window_resize_start_w, &app->window_resize_start_h);
 
     app->gl_context = SDL_GL_CreateContext(app->window);
-    app->renderer_data.renderer = app->renderer;
 
     size_t clay_mem_size = Clay_MinMemorySize();
     app->clay_arena = Clay_CreateArenaWithCapacityAndMemory(clay_mem_size, malloc(clay_mem_size));
     Clay_Initialize(app->clay_arena, (Clay_Dimensions){960, 540}, (Clay_ErrorHandler){ clay_error_handler, 0 });
+	Clay_SetMeasureTextFunction(measure_text, app->renderer_data.fonts);
 
     return SDL_APP_CONTINUE;
 }
