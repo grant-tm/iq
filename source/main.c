@@ -10,6 +10,14 @@
 #include "clay.h"
 #include "renderers/SDL3/clay_renderer_SDL3.c"
 
+// path relative to project root
+#define FONT_DIRECTORY "assets/fonts"
+#define ICON_DIRECTORY "assets/icons"
+
+// construct path from project_root/bin
+#define FONT_PATH(ttf_file_name) "../" FONT_DIRECTORY "/" ttf_file_name
+#define ICON_PATH(svg_file_name) "../" ICON_DIRECTORY "/" svg_file_name
+
 //=============================================================================
 // UI CONSTANTS
 //=============================================================================
@@ -504,38 +512,31 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
     }
 
 	// -- Load Fonts -----------------------------------------
-    TTF_Font *roboto_regular = TTF_OpenFont("resources/Roboto/Roboto-Regular.ttf", 24);
+    TTF_Font *roboto_regular = TTF_OpenFont(FONT_PATH("Roboto-Regular.ttf"), 24);
     if (!roboto_regular) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
     app->renderer_data.fonts[FONT_ID_ROBOTO_REGULAR] = roboto_regular;
 
-	TTF_Font *icons = TTF_OpenFont("resources/Material-Design-Iconic-Font.ttf", 24);
-    if (!icons) {
-        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-    app->renderer_data.fonts[FONT_ID_ICONS] = icons;
-
 	// -- Load SVG Icons ----------------------------------
 	app->icons = SDL_calloc(NUM_ICON_IDS, sizeof(SDL_Texture *));
-	app->icons[ICON_ID_CLOSE] = IMG_LoadTexture(app->renderer_data.renderer, "resources/icons/close.svg");
+	app->icons[ICON_ID_CLOSE] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("close.svg"));
     if (!app->icons[ICON_ID_CLOSE]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-	app->icons[ICON_ID_RESTORE_WINDOW] = IMG_LoadTexture(app->renderer_data.renderer, "resources/icons/restore_window.svg");
+	app->icons[ICON_ID_RESTORE_WINDOW] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("restore_window.svg"));
 	if (!app->icons[ICON_ID_RESTORE_WINDOW]) {
 		SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
-	app->icons[ICON_ID_MAXIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, "resources/icons/square.svg");
+	app->icons[ICON_ID_MAXIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("square.svg"));
     if (!app->icons[ICON_ID_MAXIMIZE]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-	app->icons[ICON_ID_MINIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, "resources/icons/minimize.svg");
+	app->icons[ICON_ID_MINIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("minimize.svg"));
     if (!app->icons[ICON_ID_MINIMIZE]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
