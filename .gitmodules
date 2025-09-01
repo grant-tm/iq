@@ -1,6 +1,6 @@
-[submodule "xtdlib"]
+[submodule "modules/clay"]
+	path = modules/clay
+	url = https://github.com/grant-tm/clay.git
+[submodule "modules/xtdlib"]
 	path = modules/xtdlib
 	url = https://github.com/grant-tm/xtdlib
-[submodule "clay"]
-	path = modules/clay
-	url = https://github.com/nicbarker/clay.git
