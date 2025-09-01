@@ -432,7 +432,7 @@ bool check_dragging (ApplicationState *app) {
 
 	i32 drag_area_left_x = header_bounding_box.x;
 	i32 drag_area_top_y = header_bounding_box.y;
-	i32 drag_area_right_x = header_bounding_box.x + header_bounding_box.width;
+	i32 drag_area_right_x = header_bounding_box.x + header_bounding_box.width - (35 * 3);
 	i32 drag_area_bottom_y = header_bounding_box.y + header_bounding_box.height;
 
 	bool cursor_within_drag_area = 
