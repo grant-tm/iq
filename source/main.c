@@ -333,7 +333,7 @@ static void render (ApplicationState *app) {
     SDL_SetRenderDrawColor(app->renderer_data.renderer, 0, 0, 0, 255);
     SDL_RenderClear(app->renderer_data.renderer);
 
-    SDL_Clay_RenderClayCommands(&app->renderer_data, &cmds);
+    render_clay_commands(&app->renderer_data, &cmds);
 
     SDL_RenderPresent(app->renderer_data.renderer);
 }

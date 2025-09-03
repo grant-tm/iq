@@ -1,7 +1,6 @@
 #include "render.h"
 
-//all rendering is performed by a single SDL call, avoiding multiple RenderRect + plumbing choice for circles.
-void SDL_Clay_RenderFillRoundedRect(Clay_SDL3RendererData *rendererData, const SDL_FRect rect, const float cornerRadius, const Clay_Color _color) {
+void render_rounded_rectangle (Clay_SDL3RendererData *rendererData, const SDL_FRect rect, const float cornerRadius, const Clay_Color _color) {
     const SDL_FColor color = { _color.r/255, _color.g/255, _color.b/255, _color.a/255 };
 
     int indexCount = 0, vertexCount = 0;
@@ -102,7 +101,7 @@ void SDL_Clay_RenderFillRoundedRect(Clay_SDL3RendererData *rendererData, const S
     SDL_RenderGeometry(rendererData->renderer, NULL, vertices, vertexCount, indices, indexCount);
 }
 
-void SDL_Clay_RenderArc(Clay_SDL3RendererData *rendererData, const SDL_FPoint center, const float radius, const float startAngle, const float endAngle, const float thickness, const Clay_Color color) {
+void render_arc (Clay_SDL3RendererData *rendererData, const SDL_FPoint center, const float radius, const float startAngle, const float endAngle, const float thickness, const Clay_Color color) {
     SDL_SetRenderDrawColor(rendererData->renderer, color.r, color.g, color.b, color.a);
 
     const float radStart = startAngle * (SDL_PI_F / 180.0f);
@@ -127,7 +126,7 @@ void SDL_Clay_RenderArc(Clay_SDL3RendererData *rendererData, const SDL_FPoint ce
     }
 }
 
-void SDL_Clay_RenderClayCommands(Clay_SDL3RendererData *rendererData, Clay_RenderCommandArray *rcommands)
+void render_clay_commands (Clay_SDL3RendererData *rendererData, Clay_RenderCommandArray *rcommands)
 {
     for (int i = 0; i < rcommands->length; i++) {
         Clay_RenderCommand *rcmd = Clay_RenderCommandArray_Get(rcommands, i);
@@ -140,7 +139,7 @@ void SDL_Clay_RenderClayCommands(Clay_SDL3RendererData *rendererData, Clay_Rende
                 SDL_SetRenderDrawBlendMode(rendererData->renderer, SDL_BLENDMODE_BLEND);
                 SDL_SetRenderDrawColor(rendererData->renderer, config->backgroundColor.r, config->backgroundColor.g, config->backgroundColor.b, config->backgroundColor.a);
                 if (config->cornerRadius.topLeft > 0) {
-                    SDL_Clay_RenderFillRoundedRect(rendererData, rect, config->cornerRadius.topLeft, config->backgroundColor);
+                    render_rounded_rectangle(rendererData, rect, config->cornerRadius.topLeft, config->backgroundColor);
                 } else {
                     SDL_RenderFillRect(rendererData->renderer, &rect);
                 }
@@ -197,25 +196,25 @@ void SDL_Clay_RenderClayCommands(Clay_SDL3RendererData *rendererData, Clay_Rende
                 if (config->cornerRadius.topLeft > 0) {
                     const float centerX = rect.x + clampedRadii.topLeft -1;
                     const float centerY = rect.y + clampedRadii.topLeft - 1;
-                    SDL_Clay_RenderArc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.topLeft,
+                    render_arc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.topLeft,
                         180.0f, 270.0f, config->width.top, config->color);
                 }
                 if (config->cornerRadius.topRight > 0) {
                     const float centerX = rect.x + rect.w - clampedRadii.topRight;
                     const float centerY = rect.y + clampedRadii.topRight - 1;
-                    SDL_Clay_RenderArc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.topRight,
+                	render_arc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.topRight,
                         270.0f, 360.0f, config->width.top, config->color);
                 }
                 if (config->cornerRadius.bottomLeft > 0) {
                     const float centerX = rect.x + clampedRadii.bottomLeft -1;
                     const float centerY = rect.y + rect.h - clampedRadii.bottomLeft;
-                    SDL_Clay_RenderArc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.bottomLeft,
+                    render_arc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.bottomLeft,
                         90.0f, 180.0f, config->width.bottom, config->color);
                 }
                 if (config->cornerRadius.bottomRight > 0) {
                     const float centerX = rect.x + rect.w - clampedRadii.bottomRight;
                     const float centerY = rect.y + rect.h - clampedRadii.bottomRight;
-                    SDL_Clay_RenderArc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.bottomRight,
+                    render_arc(rendererData, (SDL_FPoint){centerX, centerY}, clampedRadii.bottomRight,
                         0.0f, 90.0f, config->width.bottom, config->color);
                 }
 

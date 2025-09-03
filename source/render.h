@@ -18,10 +18,10 @@ typedef struct {
 
 static SDL_Rect currentClippingRectangle;
 
-void SDL_Clay_RenderFillRoundedRect(Clay_SDL3RendererData *rendererData, const SDL_FRect rect, const float cornerRadius, const Clay_Color _color);
+void fill_rounded_rectangle (Clay_SDL3RendererData *rendererData, const SDL_FRect rect, const float cornerRadius, const Clay_Color _color);
 
-void SDL_Clay_RenderArc(Clay_SDL3RendererData *rendererData, const SDL_FPoint center, const float radius, const float startAngle, const float endAngle, const float thickness, const Clay_Color color);
+void render_arc (Clay_SDL3RendererData *rendererData, const SDL_FPoint center, const float radius, const float startAngle, const float endAngle, const float thickness, const Clay_Color color);
 
-void SDL_Clay_RenderClayCommands(Clay_SDL3RendererData *rendererData, Clay_RenderCommandArray *rcommands);
+void render_clay_commands (Clay_SDL3RendererData *rendererData, Clay_RenderCommandArray *rcommands);
 
 #endif // RENDER_H
