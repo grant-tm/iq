@@ -13,16 +13,33 @@ static const Corner CORNERS[4] = {
     {1, 0, -1,  1, 3}, // bottom left
 };
 
-static inline void add_triangle(i32 *indices, i32 *icount, i32 a, i32 b, i32 c) {
-    indices[(*icount)++] = a;
-    indices[(*icount)++] = b;
-    indices[(*icount)++] = c;
+static inline void add_triangle(i32 *indices, i32 *index_count, i32 a, i32 b, i32 c) {
+    indices[(*index_count)++] = a;
+    indices[(*index_count)++] = b;
+    indices[(*index_count)++] = c;
 }
 
-void render_rounded_rectangle(RenderContext *render_context, const SDL_FRect rect, const f32 corner_radius, const Clay_Color clay_color) {
-    
-	const SDL_FColor color = { clay_color.r/255, clay_color.g/255, clay_color.b/255, clay_color.a/255 };
+SDL_FColor clay_color_to_sdl_color (Clay_Color clay_color) {
+	return (SDL_FColor) {clay_color.r / 255, clay_color.g / 255, clay_color.b / 255, clay_color.a / 255};
+}
 
+#define CLAY_COLOR_TO_SDL_COLOR(color) {(color).r / 255, (color).g / 255, (color).b / 255, (color).a / 255};
+
+void render_rectangle (RenderContext *render_context, const SDL_FRect rect, const f32 corner_radius, const Clay_Color color) {
+	
+	SDL_SetRenderDrawBlendMode(render_context->renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(render_context->renderer, color.r, color.g, color.b, color.a);
+
+	if (corner_radius > 0) {
+		const SDL_FColor sdl_color = CLAY_COLOR_TO_SDL_COLOR(color); 
+		render_rounded_rectangle(render_context, rect, corner_radius, sdl_color);
+	} else {
+		SDL_RenderFillRect(render_context->renderer, &rect);
+	}
+}
+
+void render_rounded_rectangle (RenderContext *render_context, const SDL_FRect rect, const f32 corner_radius, const SDL_FColor color) {
+    
     const f32 min_radius = xtd_min(rect.w, rect.h) / 2.0f;
     const f32 radius = xtd_min(corner_radius, min_radius);
     const i32 num_circle_segments = xtd_max(NUM_CIRCLE_SEGMENTS, (i32) radius * 0.5f);
@@ -43,7 +60,7 @@ void render_rounded_rectangle(RenderContext *render_context, const SDL_FRect rec
 
     // center rectangle
     vertices[vertex_count++] = (SDL_Vertex){{left,  top},    color, {0, 0}}; //0 center TL
-    vertices[vertex_count++] = (SDL_Vertex){{right, top},    color, {1, 0}}; //1 center TR
+	vertices[vertex_count++] = (SDL_Vertex){{right, top},    color, {1, 0}}; //1 center TR
     vertices[vertex_count++] = (SDL_Vertex){{right, bottom}, color, {1, 1}}; //2 center BR
     vertices[vertex_count++] = (SDL_Vertex){{left,  bottom}, color, {0, 1}}; //3 center BL
 
@@ -101,13 +118,13 @@ void render_rounded_rectangle(RenderContext *render_context, const SDL_FRect rec
     SDL_RenderGeometry(render_context->renderer, NULL, vertices, vertex_count, indices, index_count);
 }
 
-void render_arc(RenderContext *render_context, const SDL_FPoint center, const f32 radius,
-    const f32 start_angle, const float endAngle, const float thickness, const Clay_Color color) {
+void render_arc (RenderContext *render_context, const SDL_FPoint center, const f32 radius,
+    const f32 start_angle, const float end_angle, const float thickness, const Clay_Color color) {
 
     SDL_SetRenderDrawColor(render_context->renderer, color.r, color.g, color.b, color.a);
 
     const f32 rad_start = start_angle * (SDL_PI_F / 180.0f);
-    const f32 rad_end   = endAngle   * (SDL_PI_F / 180.0f);
+    const f32 rad_end   = end_angle   * (SDL_PI_F / 180.0f);
 
     const i32 boosted_arc_resolution = (i32) radius * 1.5f; // increase resolution for large circles (1.5 is an arbitrary coefficient)
     const i32 num_circle_segments = xtd_max(NUM_CIRCLE_SEGMENTS, boosted_arc_resolution);
@@ -131,11 +148,22 @@ void render_arc(RenderContext *render_context, const SDL_FPoint center, const f3
     }
 }
 
-void render_clay_commands(RenderContext *render_context, Clay_RenderCommandArray *rcommands) {
-    for (i32 i = 0; i < rcommands->length; i++) {
-        Clay_RenderCommand *rcmd = Clay_RenderCommandArray_Get(rcommands, i);
+void render_text (f32 x_position, f32 y_position, TTF_TextEngine *text_engine, TTF_Font *font, i32 font_size, const char *text, const u32 text_length, Clay_Color color) { 
+	TTF_SetFontSize(font, font_size);
+
+	TTF_Text *ttf_text = TTF_CreateText(text_engine, font, text, text_length);
+	TTF_SetTextColor(ttf_text, color.r, color.g, color.b, color.a);
+	
+	TTF_DrawRendererText(ttf_text, x_position, y_position);
+	
+	TTF_DestroyText(ttf_text);
+}
+
+void render_clay_commands (RenderContext *render_context, Clay_RenderCommandArray *render_commands) {
+    for (i32 i = 0; i < render_commands->length; i++) {
+        Clay_RenderCommand *render_command = Clay_RenderCommandArray_Get(render_commands, i);
         
-		const Clay_BoundingBox bounding_box = rcmd->boundingBox;
+		const Clay_BoundingBox bounding_box = render_command->boundingBox;
         const SDL_FRect rect = {
             (i32) bounding_box.x,
             (i32) bounding_box.y,
@@ -143,55 +171,30 @@ void render_clay_commands(RenderContext *render_context, Clay_RenderCommandArray
             (i32) bounding_box.height
         };
 
-        switch (rcmd->commandType) {
-            case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: {
-                Clay_RectangleRenderData *config = &rcmd->renderData.rectangle;
+        switch (render_command->commandType) {
+            
+			case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: 
+			{
+            	Clay_RectangleRenderData *config = &render_command->renderData.rectangle; 
+				render_rectangle(render_context, rect, config->cornerRadius.topLeft, config->backgroundColor);
+			} 
+			break;
 
-                SDL_SetRenderDrawBlendMode(render_context->renderer, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(
-                    render_context->renderer,
-                    config->backgroundColor.r,
-                    config->backgroundColor.g,
-                    config->backgroundColor.b,
-                    config->backgroundColor.a
-                );
+            case CLAY_RENDER_COMMAND_TYPE_TEXT: 
+			{
+				Clay_TextRenderData *config = &render_command->renderData.text;
+				render_text(rect.x, rect.y, 
+					render_context->text_engine, 
+					render_context->fonts[config->fontId], config->fontSize, 
+					config->stringContents.chars, config->stringContents.length, 
+					config->textColor
+				);
+			}
+			break;
 
-                if (config->cornerRadius.topLeft > 0) {
-                    render_rounded_rectangle(
-                        render_context,
-                        rect,
-                        config->cornerRadius.topLeft,
-                        config->backgroundColor
-                    );
-                } else {
-                    SDL_RenderFillRect(render_context->renderer, &rect);
-                }
-            } break;
-
-            case CLAY_RENDER_COMMAND_TYPE_TEXT: {
-                Clay_TextRenderData *config = &rcmd->renderData.text;
-                TTF_Font *font = render_context->fonts[config->fontId];
-
-                TTF_SetFontSize(font, config->fontSize);
-                TTF_Text *text = TTF_CreateText(
-                    render_context->text_engine,
-                    font,
-                    config->stringContents.chars,
-                    config->stringContents.length
-                );
-                TTF_SetTextColor(
-                    text,
-                    config->textColor.r,
-                    config->textColor.g,
-                    config->textColor.b,
-                    config->textColor.a
-                );
-                TTF_DrawRendererText(text, rect.x, rect.y);
-                TTF_DestroyText(text);
-            } break;
-
-            case CLAY_RENDER_COMMAND_TYPE_BORDER: {
-                Clay_BorderRenderData *config = &rcmd->renderData.border;
+            case CLAY_RENDER_COMMAND_TYPE_BORDER: 
+			{
+                Clay_BorderRenderData *config = &render_command->renderData.border;
 
                 const f32 min_radius = xtd_min(rect.w, rect.h) / 2.0f;
                 const Clay_CornerRadius clampedRadii = {
@@ -287,10 +290,11 @@ void render_clay_commands(RenderContext *render_context, Clay_RenderCommandArray
                         config->color
                     );
                 }
-            } break;
+            } 
+			break;
 
             case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START: {
-                Clay_BoundingBox boundingBox = rcmd->boundingBox;
+                Clay_BoundingBox boundingBox = render_command->boundingBox;
                 currentClippingRectangle = (SDL_Rect){
                     .x = boundingBox.x,
                     .y = boundingBox.y,
@@ -307,14 +311,14 @@ void render_clay_commands(RenderContext *render_context, Clay_RenderCommandArray
             }
 
             case CLAY_RENDER_COMMAND_TYPE_IMAGE: {
-                SDL_Texture *texture = (SDL_Texture *) rcmd->renderData.image.imageData;
+                SDL_Texture *texture = (SDL_Texture *) render_command->renderData.image.imageData;
                 const SDL_FRect dest = { rect.x, rect.y, rect.w, rect.h };
                 SDL_RenderTexture(render_context->renderer, texture, NULL, &dest);
                 break;
             }
 
             default:
-                SDL_Log("Unknown render command type: %d", rcmd->commandType);
+                SDL_Log("Unknown render command type: %d", render_command->commandType);
         }
     }
 }
