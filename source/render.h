@@ -14,7 +14,8 @@
 
 typedef struct {
     SDL_Renderer *renderer;
-    TTF_TextEngine *text_engine;
+    SDL_GLContext gl_context;
+	TTF_TextEngine *text_engine;
     TTF_Font **fonts;
 } RenderContext;
 
