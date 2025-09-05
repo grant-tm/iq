@@ -97,7 +97,7 @@ typedef struct MouseState {
 typedef struct ApplicationState {
 
 	SDL_Window *window;
-    SDL_GLContext gl_context;
+    //SDL_GLContext gl_context;
 	SDL_Texture **icons; 
 	RenderContext render_context;
     Clay_Arena clay_arena;
@@ -188,7 +188,7 @@ void application_header (ApplicationState *app) {
 			.childAlignment = { .x = CLAY_ALIGN_X_RIGHT },
 		},
 		.backgroundColor = COLOR_BACKGROUND_HEIGHT_2,
-		.border = { .width = {1, 1, 1, 1, 0}, .color = COLOR_BORDER },	
+		.border = { .width = {1, 1, 1, 1, 0}, .color = COLOR_BORDER },
 	}) {
 		// -- Minimize Button -----------------------------
 		CLAY({
@@ -266,10 +266,8 @@ Clay_RenderCommandArray main_layout (ApplicationState *app) {
 			.padding = CLAY_PADDING_ALL(0), 
 			.childGap = 0 
 		},
-		.cornerRadius = {16, 16, 16, 16},
 		.backgroundColor = COLOR_BACKGROUND_HEIGHT_0, 
 		.border = { .width = {2, 2, 2, 2, 1}, .color = COLOR_BORDER },
-		.clip = { .horizontal = true, .vertical = true },
 	}) {
 		application_header(app);
 		CLAY({
@@ -553,7 +551,7 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
 	SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
 	SDL_GetWindowSize(app->window, &app->window_resize_start_w, &app->window_resize_start_h);
 
-    app->gl_context = SDL_GL_CreateContext(app->window);
+    app->render_context.gl_context = SDL_GL_CreateContext(app->window);
 
     size_t clay_mem_size = Clay_MinMemorySize();
     app->clay_arena = Clay_CreateArenaWithCapacityAndMemory(clay_mem_size, malloc(clay_mem_size));
@@ -648,7 +646,7 @@ void SDL_AppQuit (void *s, SDL_AppResult result) {
 	ApplicationState *app = (ApplicationState*)s;
     if (!app) return;
 
-    if (app->gl_context) SDL_GL_DestroyContext(app->gl_context);
+    if (app->render_context.gl_context) SDL_GL_DestroyContext(app->render_context.gl_context);
     if (app->window) SDL_DestroyWindow(app->window);
     SDL_Quit();
 
