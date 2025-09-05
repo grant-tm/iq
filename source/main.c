@@ -26,7 +26,6 @@
 //=============================================================================
 
 typedef enum FontId {
-	FONT_ID_ICONS,
 	FONT_ID_ROBOTO_REGULAR,
 	FONT_ID_NUM_FONT_IDS
 } FontId;
@@ -97,11 +96,9 @@ typedef struct MouseState {
 typedef struct ApplicationState {
 
 	SDL_Window *window;
-    SDL_Renderer *renderer;
     SDL_GLContext gl_context;
-	SDL_Texture **icons;
-    
-	Clay_SDL3RendererData renderer_data;
+	SDL_Texture **icons; 
+	RenderContext render_context;
     Clay_Arena clay_arena;
  	
 	SDL_Cursor *cursors[SDL_SYSTEM_CURSOR_COUNT];
@@ -267,7 +264,8 @@ Clay_RenderCommandArray main_layout (ApplicationState *app) {
 			.sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) }, 
 			.padding = CLAY_PADDING_ALL(0), 
 			.childGap = 0 
-		}, 
+		},
+		.cornerRadius = {16, 16, 16, 16},
 		.backgroundColor = COLOR_BACKGROUND_HEIGHT_0, 
 		.border = { .width = {2, 2, 2, 2, 1}, .color = COLOR_BORDER },
 	}) {
@@ -330,12 +328,12 @@ static void update_clay_dimensions_and_mouse_state (ApplicationState *app) {
 static void render (ApplicationState *app) {
     Clay_RenderCommandArray cmds = main_layout(app);
 
-    SDL_SetRenderDrawColor(app->renderer_data.renderer, 0, 0, 0, 255);
-    SDL_RenderClear(app->renderer_data.renderer);
+    SDL_SetRenderDrawColor(app->render_context.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(app->render_context.renderer);
 
-    render_clay_commands(&app->renderer_data, &cmds);
+    render_clay_commands(&app->render_context, &cmds);
 
-    SDL_RenderPresent(app->renderer_data.renderer);
+    SDL_RenderPresent(app->render_context.renderer);
 }
 
 //=============================================================================
@@ -498,18 +496,18 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
             960, 540,
             SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS,
             &app->window,
-            &app->renderer_data.renderer)) {
+            &app->render_context.renderer)) {
         return SDL_APP_FAILURE;
 	}
 	
 	// -- Initialize Text Engine -----------------------------
-	app->renderer_data.textEngine = TTF_CreateRendererTextEngine(app->renderer_data.renderer);
-    if (!app->renderer_data.textEngine) {
+	app->render_context.text_engine = TTF_CreateRendererTextEngine(app->render_context.renderer);
+    if (!app->render_context.text_engine) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to create text engine from renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-    app->renderer_data.fonts = SDL_calloc(FONT_ID_NUM_FONT_IDS, sizeof(TTF_Font *));
-    if (!app->renderer_data.fonts) {
+    app->render_context.fonts = SDL_calloc(FONT_ID_NUM_FONT_IDS, sizeof(TTF_Font *));
+    if (!app->render_context.fonts) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to allocate memory for the font array: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
@@ -520,26 +518,26 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-    app->renderer_data.fonts[FONT_ID_ROBOTO_REGULAR] = roboto_regular;
+    app->render_context.fonts[FONT_ID_ROBOTO_REGULAR] = roboto_regular;
 
 	// -- Load SVG Icons ----------------------------------
 	app->icons = SDL_calloc(NUM_ICON_IDS, sizeof(SDL_Texture *));
-	app->icons[ICON_ID_CLOSE] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("close.svg"));
+	app->icons[ICON_ID_CLOSE] = IMG_LoadTexture(app->render_context.renderer, ICON_PATH("close.svg"));
     if (!app->icons[ICON_ID_CLOSE]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-	app->icons[ICON_ID_RESTORE_WINDOW] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("restore_window.svg"));
+	app->icons[ICON_ID_RESTORE_WINDOW] = IMG_LoadTexture(app->render_context.renderer, ICON_PATH("restore_window.svg"));
 	if (!app->icons[ICON_ID_RESTORE_WINDOW]) {
 		SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
-	app->icons[ICON_ID_MAXIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("square.svg"));
+	app->icons[ICON_ID_MAXIMIZE] = IMG_LoadTexture(app->render_context.renderer, ICON_PATH("square.svg"));
     if (!app->icons[ICON_ID_MAXIMIZE]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-	app->icons[ICON_ID_MINIMIZE] = IMG_LoadTexture(app->renderer_data.renderer, ICON_PATH("minimize.svg"));
+	app->icons[ICON_ID_MINIMIZE] = IMG_LoadTexture(app->render_context.renderer, ICON_PATH("minimize.svg"));
     if (!app->icons[ICON_ID_MINIMIZE]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
@@ -558,7 +556,7 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
     size_t clay_mem_size = Clay_MinMemorySize();
     app->clay_arena = Clay_CreateArenaWithCapacityAndMemory(clay_mem_size, malloc(clay_mem_size));
     Clay_Initialize(app->clay_arena, (Clay_Dimensions){960, 540}, (Clay_ErrorHandler){ clay_error_handler, 0 });
-	Clay_SetMeasureTextFunction(measure_text, app->renderer_data.fonts);
+	Clay_SetMeasureTextFunction(measure_text, app->render_context.fonts);
 
     return SDL_APP_CONTINUE;
 }
