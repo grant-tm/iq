@@ -39,6 +39,7 @@ typedef enum IconId {
 } IconId;
 
 const Clay_Color COLOR_TRANSPARENT = (Clay_Color) {0, 0, 0, 0};
+const Clay_Color COLOR_MAGENTA = (Clay_Color) {255, 0, 255, 255};
 const Clay_Color COLOR_BACKGROUND_HEIGHT_0 = (Clay_Color) {25, 27, 28, 255};
 const Clay_Color COLOR_BACKGROUND_HEIGHT_1 = (Clay_Color) {31, 34, 35, 255};
 const Clay_Color COLOR_BACKGROUND_HEIGHT_2 = (Clay_Color) {39, 42, 43, 255};
@@ -187,7 +188,7 @@ void application_header (ApplicationState *app) {
 			.childAlignment = { .x = CLAY_ALIGN_X_RIGHT },
 		},
 		.backgroundColor = COLOR_BACKGROUND_HEIGHT_2,
-		.border = { .width = {1, 1, 1, 1, 0}, .color = COLOR_BORDER }
+		.border = { .width = {1, 1, 1, 1, 0}, .color = COLOR_BORDER },	
 	}) {
 		// -- Minimize Button -----------------------------
 		CLAY({
@@ -268,6 +269,7 @@ Clay_RenderCommandArray main_layout (ApplicationState *app) {
 		.cornerRadius = {16, 16, 16, 16},
 		.backgroundColor = COLOR_BACKGROUND_HEIGHT_0, 
 		.border = { .width = {2, 2, 2, 2, 1}, .color = COLOR_BORDER },
+		.clip = { .horizontal = true, .vertical = true },
 	}) {
 		application_header(app);
 		CLAY({
@@ -328,7 +330,7 @@ static void update_clay_dimensions_and_mouse_state (ApplicationState *app) {
 static void render (ApplicationState *app) {
     Clay_RenderCommandArray cmds = main_layout(app);
 
-    SDL_SetRenderDrawColor(app->render_context.renderer, 0, 0, 0, 255);
+    SDL_SetRenderDrawColor(app->render_context.renderer, 0, 0, 0, 0);
     SDL_RenderClear(app->render_context.renderer);
 
     render_clay_commands(&app->render_context, &cmds);
@@ -494,7 +496,7 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
     if (!SDL_CreateWindowAndRenderer(
 			"IQ",
             960, 540,
-            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS,
+            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_TRANSPARENT,
             &app->window,
             &app->render_context.renderer)) {
         return SDL_APP_FAILURE;
