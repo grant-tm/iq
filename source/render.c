@@ -1,6 +1,6 @@
 #include "render.h"
 
-#define CLAY_COLOR_TO_SDL_COLOR(color) {(color).r / 255, (color).g / 255, (color).b / 255, (color).a / 255};
+#define CLAY_COLOR_TO_SDL_COLOR(color) {(color).r / 255.f, (color).g / 255.f, (color).b / 255.f, (color).a / 255.f};
 
 //=============================================================================
 // HELPERS
@@ -63,7 +63,7 @@ void render_rounded_rectangle (SDL_Renderer *renderer, const SDL_FRect rect, con
     const f32 bottom = rect.y + rect.h - radius;
 
     // center rectangle
-    vertices[vertex_count++] = (SDL_Vertex){{left,  top},    color, {0, 0}}; //0 center TL
+	vertices[vertex_count++] = (SDL_Vertex){{left,  top},    color, {0, 0}}; //0 center TL
 	vertices[vertex_count++] = (SDL_Vertex){{right, top},    color, {1, 0}}; //1 center TR
     vertices[vertex_count++] = (SDL_Vertex){{right, bottom}, color, {1, 1}}; //2 center BR
     vertices[vertex_count++] = (SDL_Vertex){{left,  bottom}, color, {0, 1}}; //3 center BL
