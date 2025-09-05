@@ -1,5 +1,11 @@
 #include "render.h"
 
+#define CLAY_COLOR_TO_SDL_COLOR(color) {(color).r / 255, (color).g / 255, (color).b / 255, (color).a / 255};
+
+//=============================================================================
+// HELPERS
+//=============================================================================
+
 typedef struct Corner {
     f32 x, y;
     f32 sign_x, sign_y;
@@ -19,26 +25,24 @@ static inline void add_triangle(i32 *indices, i32 *index_count, i32 a, i32 b, i3
     indices[(*index_count)++] = c;
 }
 
-SDL_FColor clay_color_to_sdl_color (Clay_Color clay_color) {
-	return (SDL_FColor) {clay_color.r / 255, clay_color.g / 255, clay_color.b / 255, clay_color.a / 255};
-}
+//=============================================================================
+// RECTANGLE RENDERING
+//=============================================================================
 
-#define CLAY_COLOR_TO_SDL_COLOR(color) {(color).r / 255, (color).g / 255, (color).b / 255, (color).a / 255};
-
-void render_rectangle (RenderContext *render_context, const SDL_FRect rect, const f32 corner_radius, const Clay_Color color) {
+void render_rectangle (SDL_Renderer *renderer, const SDL_FRect rect, const f32 corner_radius, const Clay_Color color) {
 	
-	SDL_SetRenderDrawBlendMode(render_context->renderer, SDL_BLENDMODE_BLEND);
-	SDL_SetRenderDrawColor(render_context->renderer, color.r, color.g, color.b, color.a);
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 
 	if (corner_radius > 0) {
 		const SDL_FColor sdl_color = CLAY_COLOR_TO_SDL_COLOR(color); 
-		render_rounded_rectangle(render_context, rect, corner_radius, sdl_color);
+		render_rounded_rectangle(renderer, rect, corner_radius, sdl_color);
 	} else {
-		SDL_RenderFillRect(render_context->renderer, &rect);
+		SDL_RenderFillRect(renderer, &rect);
 	}
 }
 
-void render_rounded_rectangle (RenderContext *render_context, const SDL_FRect rect, const f32 corner_radius, const SDL_FColor color) {
+void render_rounded_rectangle (SDL_Renderer *renderer, const SDL_FRect rect, const f32 corner_radius, const SDL_FColor color) {
     
     const f32 min_radius = xtd_min(rect.w, rect.h) / 2.0f;
     const f32 radius = xtd_min(corner_radius, min_radius);
@@ -115,19 +119,25 @@ void render_rounded_rectangle (RenderContext *render_context, const SDL_FRect re
     add_triangle(indices, &index_count, 0, 3, vertex_count - 1);
 
     // Render everything
-    SDL_RenderGeometry(render_context->renderer, NULL, vertices, vertex_count, indices, index_count);
+    SDL_RenderGeometry(renderer, NULL, vertices, vertex_count, indices, index_count);
 }
 
-void render_arc (RenderContext *render_context, const SDL_FPoint center, const f32 radius,
+//=============================================================================
+// LINE RENDERING
+//=============================================================================
+
+void render_arc (SDL_Renderer *renderer, const SDL_FPoint center, const f32 radius,
     const f32 start_angle, const float end_angle, const float thickness, const Clay_Color color) {
 
-    SDL_SetRenderDrawColor(render_context->renderer, color.r, color.g, color.b, color.a);
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 
     const f32 rad_start = start_angle * (SDL_PI_F / 180.0f);
     const f32 rad_end   = end_angle   * (SDL_PI_F / 180.0f);
 
-    const i32 boosted_arc_resolution = (i32) radius * 1.5f; // increase resolution for large circles (1.5 is an arbitrary coefficient)
-    const i32 num_circle_segments = xtd_max(NUM_CIRCLE_SEGMENTS, boosted_arc_resolution);
+	// increase resolution for large circles (1.5 is an arbitrary coefficient)
+    const i32 boosted_arc_resolution = (i32) radius * 1.5f;
+
+	const i32 num_circle_segments = xtd_max(NUM_CIRCLE_SEGMENTS, boosted_arc_resolution);
 
     const f32 angle_step = (rad_end - rad_start) / (f32) num_circle_segments;
     const f32 thickness_step = 0.4f; // arbitrary value to avoid overlapping lines.
@@ -144,11 +154,116 @@ void render_arc (RenderContext *render_context, const SDL_FPoint center, const f
             points[i] = (SDL_FPoint){x, y};
         }
 
-        SDL_RenderLines(render_context->renderer, points, num_circle_segments + 1);
+        SDL_RenderLines(renderer, points, num_circle_segments + 1);
     }
 }
 
-void render_text (f32 x_position, f32 y_position, TTF_TextEngine *text_engine, TTF_Font *font, i32 font_size, const char *text, const u32 text_length, Clay_Color color) { 
+void render_border (SDL_Renderer *renderer, const SDL_FRect rect, const Clay_BorderWidth width, 
+	const Clay_CornerRadius corner_radius, const Clay_Color color) {
+	
+	const f32 min_radius = xtd_min(rect.w, rect.h) / 2.0f;	
+	const Clay_CornerRadius clamped_radii = {
+		.topLeft     = xtd_min(corner_radius.topLeft,     min_radius),
+		.topRight    = xtd_min(corner_radius.topRight,    min_radius),
+		.bottomLeft  = xtd_min(corner_radius.bottomLeft,  min_radius),
+		.bottomRight = xtd_min(corner_radius.bottomRight, min_radius)
+	};
+
+	// edges
+	SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+
+	if (width.left > 0) {
+		const f32 starting_y = rect.y + clamped_radii.topLeft;
+		const f32 length = rect.h - clamped_radii.topLeft - clamped_radii.bottomLeft;
+		SDL_FRect line = { rect.x - 1, starting_y, width.left, length };
+		SDL_RenderFillRect(renderer, &line);
+	}
+
+	if (width.right > 0) {
+		const f32 starting_x = rect.x + rect.w - (f32) width.right + 1;
+		const f32 starting_y = rect.y + clamped_radii.topRight;
+		const f32 length = rect.h - clamped_radii.topRight - clamped_radii.bottomRight;
+		SDL_FRect line = { starting_x, starting_y, width.right, length };
+		SDL_RenderFillRect(renderer, &line);
+	}
+
+	if (width.top > 0) {
+		const f32 starting_x = rect.x + clamped_radii.topLeft;
+		const f32 length = rect.w - clamped_radii.topLeft - clamped_radii.topRight;
+		SDL_FRect line = { starting_x, rect.y - 1, length, width.top };
+		SDL_RenderFillRect(renderer, &line);
+	}
+
+	if (width.bottom > 0) {
+		const f32 starting_x = rect.x + clamped_radii.bottomLeft;
+		const f32 starting_y = rect.y + rect.h - (f32) width.bottom + 1;
+		const f32 length = rect.w - clamped_radii.bottomLeft - clamped_radii.bottomRight;
+		SDL_FRect line = { starting_x, starting_y, length, width.bottom };
+		SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+		SDL_RenderFillRect(renderer, &line);
+	}
+
+	// corners
+	if (corner_radius.topLeft > 0) {
+		const f32 centerX = rect.x + clamped_radii.topLeft - 1;
+		const f32 centerY = rect.y + clamped_radii.topLeft - 1;
+		render_arc(
+			renderer,
+			(SDL_FPoint){centerX, centerY},
+			clamped_radii.topLeft,
+			180.0f, 270.0f,
+			width.top,
+			color
+		);
+	}
+
+	if (corner_radius.topRight > 0) {
+		const f32 centerX = rect.x + rect.w - clamped_radii.topRight;
+		const f32 centerY = rect.y + clamped_radii.topRight - 1;
+		render_arc(
+			renderer,
+			(SDL_FPoint){centerX, centerY},
+			clamped_radii.topRight,
+			270.0f, 360.0f,
+			width.top,
+			color
+		);
+	}
+
+	if (corner_radius.bottomLeft > 0) {
+		const f32 centerX = rect.x + clamped_radii.bottomLeft - 1;
+		const f32 centerY = rect.y + rect.h - clamped_radii.bottomLeft;
+		render_arc(
+			renderer,
+			(SDL_FPoint){centerX, centerY},
+			clamped_radii.bottomLeft,
+			90.0f, 180.0f,
+			width.bottom,
+			color
+		);
+	}
+
+	if (corner_radius.bottomRight > 0) {
+		const f32 centerX = rect.x + rect.w - clamped_radii.bottomRight;
+		const f32 centerY = rect.y + rect.h - clamped_radii.bottomRight;
+		render_arc(
+			renderer,
+			(SDL_FPoint){centerX, centerY},
+			clamped_radii.bottomRight,
+			0.0f, 90.0f,
+			width.bottom,
+			color
+		);
+	} 
+}
+
+//=============================================================================
+// TEXT RENDERING
+//=============================================================================
+
+void render_text (f32 x_position, f32 y_position, TTF_TextEngine *text_engine, TTF_Font *font, i32 font_size, 
+	const char *text, const u32 text_length, Clay_Color color) { 
+	
 	TTF_SetFontSize(font, font_size);
 
 	TTF_Text *ttf_text = TTF_CreateText(text_engine, font, text, text_length);
@@ -158,6 +273,10 @@ void render_text (f32 x_position, f32 y_position, TTF_TextEngine *text_engine, T
 	
 	TTF_DestroyText(ttf_text);
 }
+
+//=============================================================================
+// RENDER COMMAND DISPATCH
+//=============================================================================
 
 void render_clay_commands (RenderContext *render_context, Clay_RenderCommandArray *render_commands) {
     for (i32 i = 0; i < render_commands->length; i++) {
@@ -172,153 +291,40 @@ void render_clay_commands (RenderContext *render_context, Clay_RenderCommandArra
         };
 
         switch (render_command->commandType) {
-            
-			case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: 
-			{
-            	Clay_RectangleRenderData *config = &render_command->renderData.rectangle; 
-				render_rectangle(render_context, rect, config->cornerRadius.topLeft, config->backgroundColor);
-			} 
+		case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: {
+			Clay_RectangleRenderData *config = &render_command->renderData.rectangle; 
+			render_rectangle(render_context->renderer, rect, config->cornerRadius.topLeft, config->backgroundColor);
 			break;
-
-            case CLAY_RENDER_COMMAND_TYPE_TEXT: 
-			{
-				Clay_TextRenderData *config = &render_command->renderData.text;
-				render_text(rect.x, rect.y, 
-					render_context->text_engine, 
-					render_context->fonts[config->fontId], config->fontSize, 
-					config->stringContents.chars, config->stringContents.length, 
-					config->textColor
-				);
-			}
+		} 
+		case CLAY_RENDER_COMMAND_TYPE_BORDER: {
+			Clay_BorderRenderData *config = &render_command->renderData.border;
+			render_border(render_context->renderer, rect, config->width, config->cornerRadius, config->color);
 			break;
-
-            case CLAY_RENDER_COMMAND_TYPE_BORDER: 
-			{
-                Clay_BorderRenderData *config = &render_command->renderData.border;
-
-                const f32 min_radius = xtd_min(rect.w, rect.h) / 2.0f;
-                const Clay_CornerRadius clampedRadii = {
-                    .topLeft     = xtd_min(config->cornerRadius.topLeft,     min_radius),
-                    .topRight    = xtd_min(config->cornerRadius.topRight,    min_radius),
-                    .bottomLeft  = xtd_min(config->cornerRadius.bottomLeft,  min_radius),
-                    .bottomRight = xtd_min(config->cornerRadius.bottomRight, min_radius)
-                };
-
-                // edges
-                SDL_SetRenderDrawColor(render_context->renderer, config->color.r, config->color.g, config->color.b, config->color.a);
-
-                if (config->width.left > 0) {
-                    const f32 starting_y = rect.y + clampedRadii.topLeft;
-                    const f32 length = rect.h - clampedRadii.topLeft - clampedRadii.bottomLeft;
-                    SDL_FRect line = { rect.x - 1, starting_y, config->width.left, length };
-                    SDL_RenderFillRect(render_context->renderer, &line);
-                }
-
-                if (config->width.right > 0) {
-                    const f32 starting_x = rect.x + rect.w - (f32) config->width.right + 1;
-                    const f32 starting_y = rect.y + clampedRadii.topRight;
-                    const f32 length = rect.h - clampedRadii.topRight - clampedRadii.bottomRight;
-                    SDL_FRect line = { starting_x, starting_y, config->width.right, length };
-                    SDL_RenderFillRect(render_context->renderer, &line);
-                }
-
-                if (config->width.top > 0) {
-                    const f32 starting_x = rect.x + clampedRadii.topLeft;
-                    const f32 length = rect.w - clampedRadii.topLeft - clampedRadii.topRight;
-                    SDL_FRect line = { starting_x, rect.y - 1, length, config->width.top };
-                    SDL_RenderFillRect(render_context->renderer, &line);
-                }
-
-                if (config->width.bottom > 0) {
-                    const f32 starting_x = rect.x + clampedRadii.bottomLeft;
-                    const f32 starting_y = rect.y + rect.h - (f32) config->width.bottom + 1;
-                    const f32 length = rect.w - clampedRadii.bottomLeft - clampedRadii.bottomRight;
-                    SDL_FRect line = { starting_x, starting_y, length, config->width.bottom };
-                    SDL_SetRenderDrawColor(render_context->renderer, config->color.r, config->color.g, config->color.b, config->color.a);
-                    SDL_RenderFillRect(render_context->renderer, &line);
-                }
-
-                // corners
-                if (config->cornerRadius.topLeft > 0) {
-                    const f32 centerX = rect.x + clampedRadii.topLeft - 1;
-                    const f32 centerY = rect.y + clampedRadii.topLeft - 1;
-                    render_arc(
-                        render_context,
-                        (SDL_FPoint){centerX, centerY},
-                        clampedRadii.topLeft,
-                        180.0f, 270.0f,
-                        config->width.top,
-                        config->color
-                    );
-                }
-
-                if (config->cornerRadius.topRight > 0) {
-                    const f32 centerX = rect.x + rect.w - clampedRadii.topRight;
-                    const f32 centerY = rect.y + clampedRadii.topRight - 1;
-                    render_arc(
-                        render_context,
-                        (SDL_FPoint){centerX, centerY},
-                        clampedRadii.topRight,
-                        270.0f, 360.0f,
-                        config->width.top,
-                        config->color
-                    );
-                }
-
-                if (config->cornerRadius.bottomLeft > 0) {
-                    const f32 centerX = rect.x + clampedRadii.bottomLeft - 1;
-                    const f32 centerY = rect.y + rect.h - clampedRadii.bottomLeft;
-                    render_arc(
-                        render_context,
-                        (SDL_FPoint){centerX, centerY},
-                        clampedRadii.bottomLeft,
-                        90.0f, 180.0f,
-                        config->width.bottom,
-                        config->color
-                    );
-                }
-
-                if (config->cornerRadius.bottomRight > 0) {
-                    const f32 centerX = rect.x + rect.w - clampedRadii.bottomRight;
-                    const f32 centerY = rect.y + rect.h - clampedRadii.bottomRight;
-                    render_arc(
-                        render_context,
-                        (SDL_FPoint){centerX, centerY},
-                        clampedRadii.bottomRight,
-                        0.0f, 90.0f,
-                        config->width.bottom,
-                        config->color
-                    );
-                }
-            } 
+		}
+		case CLAY_RENDER_COMMAND_TYPE_TEXT: {
+			Clay_TextRenderData *config = &render_command->renderData.text;
+			render_text(rect.x, rect.y, render_context->text_engine, render_context->fonts[config->fontId], config->fontSize, 
+				config->stringContents.chars, config->stringContents.length, config->textColor);
 			break;
-
-            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START: {
-                Clay_BoundingBox boundingBox = render_command->boundingBox;
-                currentClippingRectangle = (SDL_Rect){
-                    .x = boundingBox.x,
-                    .y = boundingBox.y,
-                    .w = boundingBox.width,
-                    .h = boundingBox.height,
-                };
-                SDL_SetRenderClipRect(render_context->renderer, &currentClippingRectangle);
-                break;
-            }
-
-            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END: {
-                SDL_SetRenderClipRect(render_context->renderer, NULL);
-                break;
-            }
-
-            case CLAY_RENDER_COMMAND_TYPE_IMAGE: {
-                SDL_Texture *texture = (SDL_Texture *) render_command->renderData.image.imageData;
-                const SDL_FRect dest = { rect.x, rect.y, rect.w, rect.h };
-                SDL_RenderTexture(render_context->renderer, texture, NULL, &dest);
-                break;
-            }
-
-            default:
-                SDL_Log("Unknown render command type: %d", render_command->commandType);
-        }
+		}
+		case CLAY_RENDER_COMMAND_TYPE_IMAGE: {
+			SDL_Texture *texture = (SDL_Texture *) render_command->renderData.image.imageData;
+			const SDL_FRect dest = { rect.x, rect.y, rect.w, rect.h };
+			SDL_RenderTexture(render_context->renderer, texture, NULL, &dest);
+			break;
+		}
+		case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START: {
+			Clay_BoundingBox boundingBox = render_command->boundingBox;
+			currentClippingRectangle = (SDL_Rect) { .x = boundingBox.x, .y = boundingBox.y, .w = boundingBox.width, .h = boundingBox.height };
+			SDL_SetRenderClipRect(render_context->renderer, &currentClippingRectangle);
+			break;
+		}
+		case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END: {
+			SDL_SetRenderClipRect(render_context->renderer, NULL);
+			break;
+		}
+		default:
+			SDL_Log("Unknown render command type: %d", render_command->commandType);
+        } // switch end
     }
 }
