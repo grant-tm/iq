@@ -190,7 +190,7 @@ void application_header (ApplicationState *app) {
 		.border = { .width = {1, 1, 1, 1, 0}, .color = COLOR_BORDER }
 	}) {
 		// -- Minimize Button -----------------------------
-        CLAY({
+		CLAY({
             .id = CLAY_ID("ApplicationMinimizeButton"),
             .layout = { 
 				.sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) },
