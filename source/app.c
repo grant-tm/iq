@@ -11,55 +11,13 @@
 #define CLAY_IMPLEMENTATION
 #include "clay.h"
 
+#include "app.h"
 #include "render.h"
-
-// path relative to project root
-#define FONT_DIRECTORY "assets/fonts"
-#define ICON_DIRECTORY "assets/icons"
-
-// construct path from project_root/bin
-#define FONT_PATH(ttf_file_name) "../" FONT_DIRECTORY "/" ttf_file_name
-#define ICON_PATH(svg_file_name) "../" ICON_DIRECTORY "/" svg_file_name
-
-//=============================================================================
-// UI CONSTANTS
-//=============================================================================
-
-typedef enum FontId {
-	FONT_ID_ROBOTO_REGULAR,
-	FONT_ID_NUM_FONT_IDS
-} FontId;
-
-typedef enum IconId {
-	ICON_ID_CLOSE,
-	ICON_ID_RESTORE_WINDOW,
-	ICON_ID_MAXIMIZE,
-	ICON_ID_MINIMIZE,
-	NUM_ICON_IDS
-} IconId;
-
-const Clay_Color COLOR_TRANSPARENT = (Clay_Color) {0, 0, 0, 0};
-const Clay_Color COLOR_MAGENTA = (Clay_Color) {255, 0, 255, 255};
-const Clay_Color COLOR_BACKGROUND_HEIGHT_0 = (Clay_Color) {25, 27, 28, 255};
-const Clay_Color COLOR_BACKGROUND_HEIGHT_1 = (Clay_Color) {31, 34, 35, 255};
-const Clay_Color COLOR_BACKGROUND_HEIGHT_2 = (Clay_Color) {39, 42, 43, 255};
-const Clay_Color COLOR_TEXT_LIGHT = (Clay_Color) {170, 170, 170, 255};
-const Clay_Color COLOR_HIGHLIGHT_BLUE = (Clay_Color) {25, 70, 86, 255};
+#include "ui.h"
 
 //=============================================================================
 // APPLICATION STATE
 //=============================================================================
-
-const Clay_Color COLOR_HIGHLIGHT_RED  = (Clay_Color) {117, 64, 64, 255};
-const Clay_Color COLOR_BORDER = (Clay_Color) {52, 58, 59, 255};
-
-typedef enum EdgeMask {
-	EDGE_NONE 	= 0,
-	EDGE_LEFT 	= 1 << 0,
-	EDGE_RIGHT 	= 1 << 1,
-	EDGE_TOP 	= 1 << 2,
-	EDGE_BOTTOM = 1 << 3 
-} EdgeMask;
 
 typedef struct ResizeRule {
 	EdgeMask edge_mask;
@@ -76,214 +34,6 @@ static const ResizeRule resize_rules[] = {
     { EDGE_LEFT  | EDGE_BOTTOM,      SDL_SYSTEM_CURSOR_NESW_RESIZE	},
     { EDGE_RIGHT | EDGE_BOTTOM,      SDL_SYSTEM_CURSOR_NWSE_RESIZE	},
 };
-
-typedef struct MouseState {
-    i32 global_position_x;
-	i32 global_position_y;
-	i32 position_x;
-    i32 position_y;
-    
-	i32 wheel_x;
-    i32 wheel_y;
-    
-	bool is_down;
-	i32 global_drag_start_x;
-	i32 global_drag_start_y;
-	i32 drag_start_x;
-	i32 drag_start_y;
-
-} MouseState;
-
-typedef struct ApplicationState {
-
-	SDL_Window *window;
-    //SDL_GLContext gl_context;
-	SDL_Texture **icons; 
-	RenderContext render_context;
-    Clay_Arena clay_arena;
- 	
-	SDL_Cursor *cursors[SDL_SYSTEM_CURSOR_COUNT];
-	MouseState mouse_state;
-	
-	EdgeMask resize_mode;
-	bool resize_started_from_hit_test;
-	bool drag_started_from_hit_test;
-	i32 window_resize_start_x;
-	i32 window_resize_start_y;
-	i32 window_resize_start_w;
-	i32 window_resize_start_h;
-
-	Clay_ElementId last_element_clicked;
-
-} ApplicationState;
-
-//=============================================================================
-// Button Handlers
-//=============================================================================
-
-void handle_application_minimize_button (Clay_ElementId id, Clay_PointerData pointer_data, intptr_t user_data) {
-	ApplicationState *app = (ApplicationState *) user_data;
-
-	if (pointer_data.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
-		app->last_element_clicked = id;
-	}
-
-	if (app->last_element_clicked.id == id.id && pointer_data.state == CLAY_POINTER_DATA_RELEASED_THIS_FRAME) {
-		SDL_MinimizeWindow(app->window);
-		app->last_element_clicked = CLAY_ID("null");
-	}
-
-}
-
-void handle_application_maximize_button (Clay_ElementId id, Clay_PointerData pointer_data, intptr_t user_data) {
-	ApplicationState *app = (ApplicationState *) user_data;
-
-	if (pointer_data.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
-		app->last_element_clicked = id;
-	}
-
-	bool window_is_maximized = SDL_GetWindowFlags(app->window) & SDL_WINDOW_MAXIMIZED;
-	bool button_triggered = (app->last_element_clicked.id == id.id) && (pointer_data.state == CLAY_POINTER_DATA_RELEASED_THIS_FRAME);	
-	
-	if (button_triggered && !window_is_maximized) {
-		SDL_MaximizeWindow(app->window);
-		app->last_element_clicked = CLAY_ID("null");
-	}
-	else if (button_triggered && window_is_maximized) {
-		SDL_RestoreWindow(app->window);
-		app->last_element_clicked = CLAY_ID("null");
-	}
-
-}
-
-void handle_application_close_button (Clay_ElementId id, Clay_PointerData pointer_data, intptr_t user_data) {
-	ApplicationState *app = (ApplicationState *) user_data;
-
-	if (pointer_data.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
-		app->last_element_clicked = id;
-	}
-
-	if (app->last_element_clicked.id == id.id && pointer_data.state == CLAY_POINTER_DATA_RELEASED_THIS_FRAME) {
-		
-		SDL_Event quit_event;
-    	quit_event.type = SDL_EVENT_QUIT;
-    	quit_event.quit.timestamp = SDL_GetTicksNS(); 		
-		SDL_PushEvent(&quit_event);
-		app->last_element_clicked = CLAY_ID("null");
-	}
-}
-
-//=============================================================================
-// LAYOUTS
-//=============================================================================
-
-void application_header (ApplicationState *app) {
-	CLAY({
-		.id = CLAY_ID("ApplicationHeader"),
-		.layout = {
-			.layoutDirection = CLAY_LEFT_TO_RIGHT,
-			.sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_FIXED(35) },
-			.padding = CLAY_PADDING_ALL(0),
-			.childGap = 0,
-			.childAlignment = { .x = CLAY_ALIGN_X_RIGHT },
-		},
-		.backgroundColor = COLOR_BACKGROUND_HEIGHT_2,
-		.border = { .width = {1, 1, 1, 1, 0}, .color = COLOR_BORDER },
-	}) {
-		// -- Minimize Button -----------------------------
-		CLAY({
-            .id = CLAY_ID("ApplicationMinimizeButton"),
-            .layout = { 
-				.sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) },
-                .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER }
-			},
-			.aspectRatio = { 1.0 / 1.0 },
-            .backgroundColor = Clay_Hovered() ? COLOR_HIGHLIGHT_BLUE : COLOR_BACKGROUND_HEIGHT_2,
-        }) {
-			Clay_OnHover(handle_application_minimize_button, (intptr_t) app);
-			CLAY({ 
-				.id = CLAY_ID("ApplicationMinimizeButtonIcon"),	
-				.layout = { .sizing = {.width = CLAY_SIZING_FIXED(12), .height = CLAY_SIZING_FIXED(1)}},
-				.backgroundColor = COLOR_TEXT_LIGHT
-			}) {}
-		}
-        // -- Maximize Button -----------------------------
-        CLAY({
-            .id = CLAY_ID("ApplicationMaximizeButton"),
-            .layout = { 
-				.sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) },
-                .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER }
-			},
-			.aspectRatio = { 1.0 / 1.0 },
-            .backgroundColor = Clay_Hovered() ? COLOR_HIGHLIGHT_BLUE : COLOR_BACKGROUND_HEIGHT_2
-        }) {
-			Clay_OnHover(handle_application_maximize_button, (intptr_t) app);
-			CLAY({
-				.id = CLAY_ID("ApplicationMaximizeButtonIcon"),
-            	.layout = {
-                	.sizing = { .width = CLAY_SIZING_FIXED(20), .height = CLAY_SIZING_GROW(0) }
-            	},
-            	.aspectRatio = { 1.0 / 1.0 },
-            	.image = {
-                	.imageData = (SDL_GetWindowFlags(app->window) & SDL_WINDOW_MAXIMIZED) ? 
-						app->icons[ICON_ID_RESTORE_WINDOW] : app->icons[ICON_ID_MAXIMIZE] 
-            	}
-        	});
-		}
-        // -- Close Button --------------------------------
-        CLAY({
-            .id = CLAY_ID("ApplicationCloseButton"),
-            .layout = { 
-				.sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) },
-                .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-			.aspectRatio = { 1.0 / 1.0 },
-            .backgroundColor = Clay_Hovered() ? COLOR_HIGHLIGHT_RED : COLOR_BACKGROUND_HEIGHT_2
-        }) {
-			Clay_OnHover(handle_application_close_button, (intptr_t) app);
-			CLAY({
-				.id = CLAY_ID("ApplicationCloseButtonIcon"),
-            	.layout = {
-                	.sizing = { .width = CLAY_SIZING_FIXED(24), .height = CLAY_SIZING_FIXED(24) }
-            	},
-            	.aspectRatio = { 1.0 / 1.0 },
-            	.image = {
-                	.imageData = app->icons[ICON_ID_CLOSE],
-            	}
-        	});
-		}
-	} 
-}
-
-Clay_RenderCommandArray main_layout (ApplicationState *app) {
-	
-	Clay_BeginLayout(); 
-	
-	CLAY({ 	
-		.id = CLAY_ID("TopLevelContainer"), 
-		.layout = { 
-			.layoutDirection = CLAY_TOP_TO_BOTTOM,
-			.sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) }, 
-			.padding = CLAY_PADDING_ALL(0), 
-			.childGap = 0 
-		},
-		.backgroundColor = COLOR_BACKGROUND_HEIGHT_0, 
-		.border = { .width = {2, 2, 2, 2, 1}, .color = COLOR_BORDER },
-	}) {
-		application_header(app);
-		CLAY({
-			.id = CLAY_ID("LeftSideBar"),
-			.layout = { .layoutDirection = CLAY_TOP_TO_BOTTOM, 
-			.sizing = { .width = CLAY_SIZING_FIXED(250), 
-			.height = CLAY_SIZING_GROW(0) }, 
-			.padding = CLAY_PADDING_ALL(16), 
-			.childGap = 16 },
-			.backgroundColor = COLOR_BACKGROUND_HEIGHT_1,
-			.border = { .width = {1, 1, 0, 1, 1}, .color = COLOR_BORDER } 	
-		}) {}
-	}
-	
-	return Clay_EndLayout();
-}
 
 //=============================================================================
 // UPDATE AND RENDER
@@ -311,22 +61,14 @@ static void update_clay_dimensions_and_mouse_state (ApplicationState *app) {
     i32 screen_width, screen_height;
     SDL_GetWindowSize(app->window, &screen_width, &screen_height);
     Clay_SetLayoutDimensions((Clay_Dimensions){ screen_width, screen_height });
-
     Clay_SetPointerState(
         (Clay_Vector2){ app->mouse_state.position_x, app->mouse_state.position_y },
         app->mouse_state.is_down
     );
-
-    float dt = 0.1f; // TODO: measure real frame delta
-    Clay_UpdateScrollContainers(
-        true,
-        (Clay_Vector2){ app->mouse_state.wheel_x, app->mouse_state.wheel_y },
-        dt
-    );
 }
 
 static void render (ApplicationState *app) {
-    Clay_RenderCommandArray cmds = main_layout(app);
+    Clay_RenderCommandArray cmds = application_layout(app);
 
     SDL_SetRenderDrawColor(app->render_context.renderer, 0, 0, 0, 0);
     SDL_RenderClear(app->render_context.renderer);
@@ -484,6 +226,16 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
     SDL_memset(app, 0, sizeof(*app));
     *out_state = app;
 
+	app->directories = SDL_malloc(sizeof(Directory) * 99);
+	app->num_directories += 99;
+
+	for (i32 i = 0; i < 99; i++) {
+		app->directories[i].name = SDL_malloc(sizeof(char) * 24);
+		char buf[24];
+		sprintf(buf, "Test Directory %d", i);
+		strncpy_s(app->directories[i].name, 24, buf, 24);
+	}
+
 	if (!TTF_Init()) {
         return SDL_APP_FAILURE;
     }
@@ -542,7 +294,17 @@ SDL_AppResult SDL_AppInit (void **out_state, int argc, char **argv) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }	
-	
+	app->icons[ICON_ID_DIRECTORY_ARROW_RIGHT] = IMG_LoadTexture(app->render_context.renderer, ICON_PATH("directory_arrow_right.svg"));
+    if (!app->icons[ICON_ID_DIRECTORY_ARROW_RIGHT]) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+	app->icons[ICON_ID_DIRECTORY_ARROW_DOWN] = IMG_LoadTexture(app->render_context.renderer, ICON_PATH("directory_arrow_down.svg"));
+    if (!app->icons[ICON_ID_DIRECTORY_ARROW_DOWN]) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load image: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
 	for (i32 i = 0; i < SDL_SYSTEM_CURSOR_COUNT; i++) {
 		app->cursors[i] = SDL_CreateSystemCursor(i);
 	}
@@ -583,7 +345,10 @@ SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
 
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
     case SDL_EVENT_WINDOW_RESIZED:
-        break;
+        i32 screen_width, screen_height;
+    	SDL_GetWindowSize(app->window, &screen_width, &screen_height);
+    	Clay_SetLayoutDimensions((Clay_Dimensions){ screen_width, screen_height }); 
+		break;
 
     case SDL_EVENT_MOUSE_MOTION:
     	
@@ -604,7 +369,9 @@ SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
     case SDL_EVENT_MOUSE_WHEEL:
         app->mouse_state.wheel_x = event->wheel.x;
         app->mouse_state.wheel_y = event->wheel.y;
-        break;
+		Clay_Vector2 wheel_state = { app->mouse_state.wheel_x, app->mouse_state.wheel_y };
+		Clay_UpdateScrollContainers(true, wheel_state, 0.001f);
+		break;
     
 	case SDL_EVENT_MOUSE_BUTTON_DOWN:
         app->mouse_state.is_down = true;
@@ -624,12 +391,14 @@ SDL_AppResult SDL_AppEvent (void *s, SDL_Event *event) {
 			SDL_GetWindowPosition(app->window, &app->window_resize_start_x, &app->window_resize_start_y);
 			app->drag_started_from_hit_test = true;
 		}	
-
+		
+		Clay_SetPointerState((Clay_Vector2) { event->motion.x, event->motion.y }, app->mouse_state.is_down);	
 		break;
     case SDL_EVENT_MOUSE_BUTTON_UP:
         app->mouse_state.is_down = false;
 		app->resize_started_from_hit_test = false;
 		app->drag_started_from_hit_test = false;
+		Clay_SetPointerState((Clay_Vector2) { event->motion.x, event->motion.y }, app->mouse_state.is_down);	
 		break;
 
 	case SDL_EVENT_KEY_DOWN:
